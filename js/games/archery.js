@@ -1,0 +1,402 @@
+/* Archery — GamePigeon style 3 rounds (50ft, 70ft, 90ft), dynamic wind deflection, bow draw & 10-ring scoring! */
+(function (A) {
+  const { U, Sound } = A;
+
+  const ROUNDS = [
+    { name: 'Level 1', dist: '50 FT', mult: 0.75, targetScale: 1.0 },
+    { name: 'Level 2', dist: '70 FT', mult: 1.0,  targetScale: 0.85 },
+    { name: 'Level 3', dist: '90 FT', mult: 1.25, targetScale: 0.70 }
+  ];
+
+  class ArcheryGame extends A.Game {
+    init() {
+      this.W = 420;
+      this.H = 760;
+
+      this.currentRound = 0;
+      this.arrowsLeft = 3;
+      this.scores = [0, 0];
+      this.turn = 0;
+
+      // Target position
+      this.target = { x: this.W / 2, y: 270, r: 130 };
+
+      // Wind (speed -5 to +5, negative = left, positive = right)
+      this.wind = 0;
+      this.arrowsOnBoard = []; // stuck arrows from current round
+
+      // Bow & crosshair state
+      this.drawing = false;
+      this.crosshair = { x: this.target.x, y: this.target.y };
+      this.drawSway = 0;
+      this.inFlight = null;
+
+      this.rollWind();
+      this.updateHUD();
+    }
+
+    rollWind() {
+      // Wind speed between -4 and +4 (0 is calm)
+      const speeds = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
+      this.wind = U.pick(speeds);
+    }
+
+    /* ---------- Input ---------- */
+    onDown(p) {
+      if (this.cpuTurn || this.over || this.inFlight) return;
+      this.drawing = true;
+      this.crosshair.x = p.x;
+      this.crosshair.y = p.y;
+      Sound.draw();
+    }
+
+    onMove(p) {
+      if (!this.drawing || this.inFlight) return;
+      this.crosshair.x = p.x;
+      this.crosshair.y = p.y;
+    }
+
+    onUp() {
+      if (!this.drawing || this.inFlight) return;
+      this.drawing = false;
+      this.releaseArrow(this.crosshair.x, this.crosshair.y);
+    }
+
+    releaseArrow(aimX, aimY) {
+      Sound.whoosh();
+      const rData = ROUNDS[this.currentRound];
+
+      // Calculate wind drift in pixels
+      // In GamePigeon: wind drift = wind * multiplier * ring_width (~13px per ring)
+      const ringWidth = (this.target.r * rData.targetScale) / 10;
+      const windDrift = this.wind * rData.mult * ringWidth;
+
+      const hitX = aimX + windDrift + U.gauss() * 2.5;
+      const hitY = aimY + U.gauss() * 2.5;
+
+      this.inFlight = {
+        startX: this.W / 2,
+        startY: this.H - 80,
+        endX: hitX,
+        endY: hitY,
+        t: 0,
+        dur: 0.38
+      };
+    }
+
+    /* ---------- CPU Shoot ---------- */
+    cpuShoot() {
+      if (!this.cpuTurn || this.over || this.inFlight) return;
+
+      this.wait(1000, () => {
+        if (!this.cpuTurn || this.over) return;
+        const rData = ROUNDS[this.currentRound];
+        const ringWidth = (this.target.r * rData.targetScale) / 10;
+        const windDrift = this.wind * rData.mult * ringWidth;
+
+        // Pro CPU counter-aims against the wind!
+        const skill = this.cpuSkill(0.65, 0.82, 0.95);
+        let aimX = this.target.x - windDrift * skill;
+        let aimY = this.target.y;
+
+        if (Math.random() > skill) {
+          aimX += U.gauss() * 32;
+          aimY += U.gauss() * 32;
+        }
+
+        this.releaseArrow(aimX, aimY);
+      });
+    }
+
+    /* ---------- Animation & Scoring ---------- */
+    update(dt) {
+      // Natural sight sway while aiming
+      if (this.drawing) {
+        this.drawSway += dt * 3.5;
+        this.crosshair.x += Math.sin(this.drawSway) * 0.7;
+        this.crosshair.y += Math.cos(this.drawSway * 1.3) * 0.7;
+      }
+
+      // Arrow in flight
+      if (this.inFlight) {
+        this.inFlight.t += dt;
+        if (this.inFlight.t >= this.inFlight.dur) {
+          const arrow = this.inFlight;
+          this.inFlight = null;
+          this.stickArrow(arrow.endX, arrow.endY);
+        }
+      }
+    }
+
+    stickArrow(x, y) {
+      Sound.thunk();
+      const rData = ROUNDS[this.currentRound];
+      const targetR = this.target.r * rData.targetScale;
+      const dist = U.dist(x, y, this.target.x, this.target.y);
+      const normDist = dist / targetR;
+
+      let score = 0;
+      if (normDist <= 1.0) {
+        score = Math.max(1, Math.min(10, 11 - Math.ceil(normDist * 10)));
+      }
+
+      this.scores[this.turn] += score;
+      this.arrowsOnBoard.push({ x, y, score });
+
+      // Visual feedback
+      if (score === 10) {
+        Sound.great();
+        this.banner('BULLSEYE! 🎯 10', { color: '#ffd166', dur: 1.2 });
+        this.fx.burst(x, y, 20, { colors: U.CONFETTI, speed: 160, life: 0.6 });
+      } else if (score >= 8) {
+        Sound.good();
+        this.banner(`+${score} PTS!`, { color: '#ff5d6c', dur: 0.9, size: 38 });
+      } else if (score > 0) {
+        this.banner(`+${score}`, { color: '#fff', dur: 0.8, size: 32 });
+      } else {
+        this.banner('MISS', { color: '#a9a3d1', dur: 0.8, size: 30 });
+      }
+
+      this.arrowsLeft--;
+      this.updateHUD();
+
+      this.wait(1100, () => {
+        if (this.arrowsLeft > 0) {
+          this.rollWind();
+          this.status(`${this.playerName(this.turn)}: ${this.arrowsLeft} arrow${this.arrowsLeft === 1 ? '' : 's'} remaining.`);
+          if (this.cpuTurn) this.cpuShoot();
+        } else {
+          // Finished round turn
+          this.endArrowRound();
+        }
+      });
+    }
+
+    endArrowRound() {
+      const opp = 1 - this.turn;
+      this.arrowsLeft = 3;
+      this.arrowsOnBoard = [];
+
+      if (this.turn === 0) {
+        // Player 1 finished this distance -> hand off to Player 2
+        const rData = ROUNDS[this.currentRound];
+        if (this.mode === 'local') {
+          this.handoff(1, `Pass to ${this.playerName(1)}`, `${rData.name} (${rData.dist}) · 3 Arrows`)
+            .then(() => {
+              this.turn = 1;
+              this.rollWind();
+              this.updateHUD();
+            });
+        } else {
+          this.turn = 1;
+          this.rollWind();
+          this.updateHUD();
+          this.cpuShoot();
+        }
+      } else {
+        // Both players finished this distance round
+        if (this.currentRound < ROUNDS.length - 1) {
+          this.currentRound++;
+          this.turn = 0;
+          this.rollWind();
+          const nextR = ROUNDS[this.currentRound];
+          this.banner(`${nextR.name} · ${nextR.dist}`, { color: '#ffd166', dur: 1.4 });
+          this.updateHUD();
+        } else {
+          // Finished all 3 rounds! Highest total score wins
+          const s0 = this.scores[0];
+          const s1 = this.scores[1];
+          const winner = s0 > s1 ? 0 : s1 > s0 ? 1 : -1;
+
+          this.finish({
+            winner,
+            title: winner === -1 ? 'Tie Match!' : `${this.playerName(winner)} wins!`,
+            text: `${this.playerName(0)}: ${s0} pts  ·  ${this.playerName(1)}: ${s1} pts`
+          });
+        }
+      }
+    }
+
+    updateHUD() {
+      const rData = ROUNDS[this.currentRound];
+      this.hud({
+        score0: this.scores[0],
+        score1: this.scores[1],
+        p0sub: this.turn === 0 ? `${this.arrowsLeft} arrows` : `${this.scores[0]} pts`,
+        p1sub: this.turn === 1 ? `${this.arrowsLeft} arrows` : `${this.scores[1]} pts`,
+        status: `${rData.name} (${rData.dist}) · Wind: ${this.wind === 0 ? 'Calm' : Math.abs(this.wind) + (this.wind > 0 ? ' ▶' : ' ◀')}`
+      });
+    }
+
+    /* ---------- Rendering ---------- */
+    renderBackdrop(c, w, h) {
+      // Sunny outdoor archery field with grassy lawn and open sky
+      const sky = c.createLinearGradient(0, 0, 0, h);
+      sky.addColorStop(0, '#1c1b3b');
+      sky.addColorStop(0.5, '#282458');
+      sky.addColorStop(0.52, '#2f8a42'); // Grass horizon
+      sky.addColorStop(1, '#1b5a26');
+      c.fillStyle = sky;
+      c.fillRect(0, 0, w, h);
+    }
+
+    render(c) {
+      const rData = ROUNDS[this.currentRound];
+      const targetR = this.target.r * rData.targetScale;
+      const tx = this.target.x;
+      const ty = this.target.y;
+
+      // 1. Archery Stand Legs (wooden tripod)
+      c.strokeStyle = '#5a2e17';
+      c.lineWidth = 8;
+      c.beginPath();
+      c.moveTo(tx - 70, ty + 240);
+      c.lineTo(tx, ty);
+      c.lineTo(tx + 70, ty + 240);
+      c.moveTo(tx, ty);
+      c.lineTo(tx, ty + 245);
+      c.stroke();
+
+      // 2. Concentric Target Rings
+      const rings = [
+        { color: '#ffffff', pts: [1, 2] },  // White outer
+        { color: '#1b1b22', pts: [3, 4] },  // Black
+        { color: '#3d8bff', pts: [5, 6] },  // Blue
+        { color: '#ff5d6c', pts: [7, 8] },  // Red
+        { color: '#ffd166', pts: [9, 10] }  // Yellow inner
+      ];
+
+      c.save();
+      c.shadowColor = 'rgba(0,0,0,0.45)';
+      c.shadowBlur = 18;
+      c.shadowOffsetY = 8;
+
+      for (let i = 0; i < 5; i++) {
+        const rad = targetR * (1 - i * 0.2);
+        c.fillStyle = rings[i].color;
+        U.circle(c, tx, ty, rad);
+        c.fill();
+        c.strokeStyle = 'rgba(0,0,0,0.25)';
+        c.lineWidth = 1;
+        c.stroke();
+
+        // Inner divider line per color zone
+        U.circle(c, tx, ty, rad - targetR * 0.1);
+        c.stroke();
+      }
+      c.restore();
+
+      // Bullseye X center mark
+      c.strokeStyle = '#1b1b22';
+      c.lineWidth = 1.8;
+      c.beginPath();
+      c.moveTo(tx - 5, ty); c.lineTo(tx + 5, ty);
+      c.moveTo(tx, ty - 5); c.lineTo(tx, ty + 5);
+      c.stroke();
+
+      // 3. Arrows Stuck on Target
+      for (const a of this.arrowsOnBoard) {
+        c.save();
+        // Arrow shadow
+        c.fillStyle = 'rgba(0,0,0,0.3)';
+        U.circle(c, a.x + 3, a.y + 3, 4); c.fill();
+
+        // Shaft & nock
+        c.fillStyle = '#ff5d6c';
+        U.circle(c, a.x, a.y, 4.5); c.fill();
+        c.fillStyle = '#ffd166';
+        U.circle(c, a.x, a.y, 2); c.fill();
+        c.restore();
+      }
+
+      // 4. Arrow In Flight
+      if (this.inFlight) {
+        const k = this.inFlight.t / this.inFlight.dur;
+        const curX = U.lerp(this.inFlight.startX, this.inFlight.endX, k);
+        const curY = U.lerp(this.inFlight.startY, this.inFlight.endY, k) - Math.sin(k * Math.PI) * 55;
+        const arrowScale = U.lerp(1.4, 0.45, k);
+
+        c.save();
+        c.translate(curX, curY);
+        c.scale(arrowScale, arrowScale);
+
+        // Wooden arrow shaft
+        c.fillStyle = '#d9a764';
+        c.fillRect(-2, -35, 4, 70);
+
+        // Red/Yellow fletching feathers
+        c.fillStyle = '#ff5d6c';
+        c.beginPath();
+        c.moveTo(-2, 25); c.lineTo(-8, 35); c.lineTo(-2, 35);
+        c.moveTo(2, 25); c.lineTo(8, 35); c.lineTo(2, 35);
+        c.fill();
+
+        // Steel arrowhead tip
+        c.fillStyle = '#adb5bd';
+        c.beginPath();
+        c.moveTo(0, -42); c.lineTo(-5, -35); c.lineTo(5, -35);
+        c.closePath();
+        c.fill();
+        c.restore();
+      }
+
+      // 5. Wind Indicator Widget (top right)
+      this.renderWindWidget(c);
+
+      // 6. Crosshair & Bow Aim Reticle (when drawing bow)
+      if (this.drawing && !this.inFlight) {
+        const cx = this.crosshair.x;
+        const cy = this.crosshair.y;
+
+        c.strokeStyle = '#ffd166';
+        c.lineWidth = 2.5;
+        U.circle(c, cx, cy, 24);
+        c.stroke();
+
+        c.beginPath();
+        c.moveTo(cx - 32, cy); c.lineTo(cx - 10, cy);
+        c.moveTo(cx + 10, cy); c.lineTo(cx + 32, cy);
+        c.moveTo(cx, cy - 32); c.lineTo(cx, cy - 10);
+        c.moveTo(cx, cy + 10); c.lineTo(cx, cy + 32);
+        c.stroke();
+
+        c.fillStyle = '#ff5d6c';
+        U.circle(c, cx, cy, 3);
+        c.fill();
+      }
+    }
+
+    renderWindWidget(c) {
+      const wx = this.W - 65, wy = 45;
+      c.fillStyle = 'rgba(0,0,0,0.45)';
+      U.rr(c, wx - 45, wy - 22, 90, 44, 14);
+      c.fill();
+
+      U.text(c, 'WIND', wx, wy - 9, { size: 10, color: '#a9a3d1', weight: 900 });
+
+      if (this.wind === 0) {
+        U.text(c, 'CALM', wx, wy + 10, { size: 14, color: '#3ee0b0', weight: 900 });
+      } else {
+        const arrow = this.wind > 0 ? '▶' : '◀';
+        U.text(c, `${arrow} ${Math.abs(this.wind)} MPH`, wx, wy + 10, { size: 13, color: '#ffd166', weight: 900 });
+      }
+    }
+  }
+
+  A.register({
+    id: 'archery',
+    name: 'Archery',
+    category: 'Sports',
+    tag: 'Wind & Range Target',
+    icon: A.ICONS.archery,
+    desc: '3 distance rounds (50ft, 70ft, 90ft). Gauge shifting crosswinds to compensate your aim and hit bullseyes!',
+    rules: [
+      'Touch and drag anywhere on screen to draw back your bowstring and aim crosshairs.',
+      'Release your finger to shoot the arrow toward the target.',
+      'Check the WIND meter: wind drifts your arrow left or right. Distance amplifies the wind effect!',
+      'Scoring: Yellow Bullseye = 10 / 9, Red = 8 / 7, Blue = 6 / 5, Black = 4 / 3, White = 2 / 1.',
+      'Shoot 3 arrows across 3 rounds. Highest total score takes the gold!'
+    ],
+    create: (stage, opts) => new ArcheryGame(stage, opts)
+  });
+})(window.Arcade);

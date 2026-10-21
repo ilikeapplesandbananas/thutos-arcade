@@ -8,4 +8,4 @@ desktop.ini
 .idea/
 
 # Logs
-*.log
+*.log_build/
