@@ -102,6 +102,23 @@
       <h3 id="resultTitle">You win!</h3>
       <p id="resultText"></p>
       <div class="result-scores" id="resultScores"></div>
+      <div id="wordBreakdown" class="word-breakdown" style="display:none">
+        <div class="wb-columns">
+          <div class="wb-col">
+            <h4 id="wbTitle0">Player 1 Words</h4>
+            <div class="wb-list" id="wbList0"></div>
+          </div>
+          <div class="wb-col">
+            <h4 id="wbTitle1">Player 2 Words</h4>
+            <div class="wb-list" id="wbList1"></div>
+          </div>
+        </div>
+        <button class="btn btn-ghost wb-reveal-btn" id="wbRevealBtn">Reveal Missed Words 👁️</button>
+        <div class="wb-missed" id="wbMissed" style="display:none">
+          <h4>Words Neither Player Found</h4>
+          <div class="wb-list wb-missed-list" id="wbMissedList"></div>
+        </div>
+      </div>
       <div class="sheet-actions"><button class="btn btn-ghost" id="resLobby">Lobby</button><button class="btn btn-ghost" id="resSettings">Settings</button><button class="btn btn-primary" id="resRematch">Rematch</button></div>
     </div>
   </div>

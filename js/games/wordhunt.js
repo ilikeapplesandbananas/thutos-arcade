@@ -49,7 +49,7 @@
       for (let i = 0; i < 16; i++) {
         let die = shuffledDice[i];
         let ch = U.pick(die.split(''));
-        if (ch === 'Q') ch = 'Qu';
+        if (ch === 'Q') ch = 'Q'; // strictly single letter
         letters.push(ch);
       }
       return letters;
@@ -81,18 +81,24 @@
 
     /* ---------- Input & Swiping ---------- */
     tileAt(x, y) {
-      const bx = x - this.boardX;
-      const by = y - this.boardY;
-      if (bx < 0 || by < 0) return null;
-
       const step = this.tileSize + this.tileGap;
-      const c = Math.floor(bx / step);
-      const r = Math.floor(by / step);
+      const snapRadius = this.tileSize * 0.72; // circular center snapping for effortless diagonal swiping
 
-      if (c >= 0 && c < this.gridSize && r >= 0 && r < this.gridSize) {
-        return { r, c, idx: r * this.gridSize + c };
+      let bestTile = null;
+      let bestDist = snapRadius;
+
+      for (let r = 0; r < this.gridSize; r++) {
+        for (let c = 0; c < this.gridSize; c++) {
+          const cx = this.boardX + c * step + this.tileSize / 2;
+          const cy = this.boardY + r * step + this.tileSize / 2;
+          const d = Math.hypot(x - cx, y - cy);
+          if (d < bestDist) {
+            bestDist = d;
+            bestTile = { r, c, idx: r * this.gridSize + c };
+          }
+        }
       }
-      return null;
+      return bestTile;
     }
 
     onDown(p) {
@@ -284,10 +290,27 @@
           const s1 = this.scores[1];
           const winner = s0 > s1 ? 0 : s1 > s0 ? 1 : -1;
 
+          // Word breakdown data
+          const allPossible = this.solveGrid();
+          const p0List = Array.from(this.foundWords[0]).map(w => ({ word: w, pts: Words.huntScore(w.length) }))
+            .sort((a, b) => b.pts - a.pts || a.word.localeCompare(b.word));
+          const p1List = Array.from(this.foundWords[1]).map(w => ({ word: w, pts: Words.huntScore(w.length) }))
+            .sort((a, b) => b.pts - a.pts || a.word.localeCompare(b.word));
+          const missedList = allPossible
+            .filter(w => !this.foundWords[0].has(w) && !this.foundWords[1].has(w))
+            .map(w => ({ word: w, pts: Words.huntScore(w.length) }))
+            .sort((a, b) => b.pts - a.pts || a.word.localeCompare(b.word))
+            .slice(0, 50);
+
           this.finish({
             winner,
             title: winner === -1 ? 'Tie Game!' : `${this.playerName(winner)} wins!`,
-            text: `${this.playerName(0)}: ${s0} pts (${this.foundWords[0].size} words) · ${this.playerName(1)}: ${s1} pts (${this.foundWords[1].size} words)`
+            text: `${this.playerName(0)}: ${s0} pts (${p0List.length} words) · ${this.playerName(1)}: ${s1} pts (${p1List.length} words)`,
+            words: {
+              p0: p0List,
+              p1: p1List,
+              missed: missedList
+            }
           });
         }
       });

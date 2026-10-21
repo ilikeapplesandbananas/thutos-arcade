@@ -17,23 +17,24 @@
       this.H = 760;
 
       // Table area (portrait orientation, pool table viewed from above)
-      this.tw = 320;
-      this.th = 580;
-      this.tx = (this.W - this.tw) / 2;
+      // tw: 296, tx: 74 leaves 74px on left so power bar has plenty of room
+      this.tw = 296;
+      this.th = 570;
+      this.tx = 74;
       this.ty = (this.H - this.th) / 2 + 10;
       this.r = 9.5; // ball radius
 
-      // Pockets (6 pockets)
-      const pr = 17;
+      // Pockets (6 pockets with authentic mouth positioning)
+      const pr = 19;
       const x0 = this.tx, x1 = this.tx + this.tw;
       const y0 = this.ty, ym = this.ty + this.th / 2, y1 = this.ty + this.th;
       this.pockets = [
-        { x: x0 + 4, y: y0 + 4, r: pr },
-        { x: x1 - 4, y: y0 + 4, r: pr },
-        { x: x0 - 2, y: ym,     r: pr - 2 },
-        { x: x1 + 2, y: ym,     r: pr - 2 },
-        { x: x0 + 4, y: y1 - 4, r: pr },
-        { x: x1 - 4, y: y1 - 4, r: pr }
+        { id: 0, x: x0 + 8, y: y0 + 8, r: pr },
+        { id: 1, x: x1 - 8, y: y0 + 8, r: pr },
+        { id: 2, x: x0 + 2, y: ym,     r: pr - 1 },
+        { id: 3, x: x1 - 2, y: ym,     r: pr - 1 },
+        { id: 4, x: x0 + 8, y: y1 - 8, r: pr },
+        { id: 5, x: x1 - 8, y: y1 - 8, r: pr }
       ];
 
       // Table play bounds (cushion inner edges)
@@ -174,8 +175,8 @@
         return;
       }
 
-      // Left power slider hit (x: 10 to 55)
-      if (p.x < 55) {
+      // Left power slider hit (x: 5 to 52)
+      if (p.x < 52) {
         this.draggingPower = true;
         this.updatePower(p.y);
         return;
@@ -244,7 +245,8 @@
       this.pocketedThisShot = [];
       this.scratch = false;
 
-      const speed = U.lerp(180, 1100, Math.min(1, power * 1.1));
+      // Realistic speed curve fitting chosen pull bar effort
+      const speed = U.lerp(150, 1250, Math.pow(power, 1.15));
       this.cueBall.vx = Math.cos(this.aimAngle) * speed;
       this.cueBall.vy = Math.sin(this.aimAngle) * speed;
       Sound.cue(power);
@@ -274,23 +276,36 @@
             b.vy = 0;
           }
 
-          // Check pocket drops
+          // Check pocket drops and funnel suction
+          let nearPocket = false;
           for (const p of this.pockets) {
-            if (!b.sinking && !b.sunk && U.dist(b.x, b.y, p.x, p.y) < p.r * 0.95) {
-              this.pocketBall(b, p);
+            const dist = U.dist(b.x, b.y, p.x, p.y);
+            if (dist < p.r * 1.15) {
+              if (!b.sinking && !b.sunk) {
+                this.pocketBall(b, p);
+              }
+              nearPocket = true;
               break;
+            } else if (dist < p.r * 1.75) {
+              nearPocket = true;
+              // Pocket mouth suction funnels the ball smoothly into the cup
+              const pull = (p.r * 1.75 - dist) * 14 * sdt;
+              b.vx += ((p.x - b.x) / dist) * pull;
+              b.vy += ((p.y - b.y) / dist) * pull;
             }
           }
           if (b.sunk || b.sinking) continue;
 
-          // Cushion bounds
-          let hitRail = false;
-          if (b.x < this.minX) { b.x = this.minX; b.vx = -b.vx * 0.82; hitRail = true; }
-          if (b.x > this.maxX) { b.x = this.maxX; b.vx = -b.vx * 0.82; hitRail = true; }
-          if (b.y < this.minY) { b.y = this.minY; b.vy = -b.vy * 0.82; hitRail = true; }
-          if (b.y > this.maxY) { b.y = this.maxY; b.vy = -b.vy * 0.82; hitRail = true; }
-          if (hitRail && Math.hypot(b.vx, b.vy) > 30) {
-            Sound.thud(Math.hypot(b.vx, b.vy) / 600);
+          // Cushion bounds (only when not entering a pocket opening)
+          if (!nearPocket) {
+            let hitRail = false;
+            if (b.x < this.minX) { b.x = this.minX; b.vx = -b.vx * 0.82; hitRail = true; }
+            if (b.x > this.maxX) { b.x = this.maxX; b.vx = -b.vx * 0.82; hitRail = true; }
+            if (b.y < this.minY) { b.y = this.minY; b.vy = -b.vy * 0.82; hitRail = true; }
+            if (b.y > this.maxY) { b.y = this.maxY; b.vy = -b.vy * 0.82; hitRail = true; }
+            if (hitRail && Math.hypot(b.vx, b.vy) > 30) {
+              Sound.thud(Math.hypot(b.vx, b.vy) / 600);
+            }
           }
         }
 
@@ -967,41 +982,47 @@
 
     renderPowerSlider(c) {
       const x = 18;
-      const top = this.ty + 60;
-      const h = this.th - 120;
-      const w = 18;
+      const top = this.ty + 40;
+      const h = this.th - 80;
+      const w = 20;
 
       // Track background
-      c.fillStyle = 'rgba(0,0,0,0.45)';
-      U.rr(c, x, top, w, h, 9);
+      c.fillStyle = 'rgba(0,0,0,0.55)';
+      U.rr(c, x, top, w, h, 10);
       c.fill();
-      c.strokeStyle = 'rgba(255,255,255,0.15)';
+      c.strokeStyle = 'rgba(255,255,255,0.18)';
       c.lineWidth = 1.5;
       c.stroke();
 
-      // Power fill gradient (green to red)
+      // Power fill gradient (yellow -> orange -> red)
       if (this.power > 0) {
         const fillH = h * this.power;
         const fg = c.createLinearGradient(0, top, 0, top + fillH);
         fg.addColorStop(0, '#ffd166');
-        fg.addColorStop(0.6, '#ff9f43');
+        fg.addColorStop(0.5, '#ff9f43');
         fg.addColorStop(1, '#ff5d6c');
         c.fillStyle = fg;
-        U.rr(c, x + 2, top + 2, w - 4, fillH, 7);
+        U.rr(c, x + 2, top + 2, w - 4, fillH, 8);
         c.fill();
       }
 
       // Slider handle
       const hy = top + h * this.power;
-      c.fillStyle = '#fff';
-      U.circle(c, x + w / 2, hy, 12);
+      c.save();
+      c.shadowColor = this.power > 0 ? '#ff9f43' : 'rgba(0,0,0,0.4)';
+      c.shadowBlur = this.power > 0 ? 12 : 6;
+      c.fillStyle = '#ffffff';
+      U.circle(c, x + w / 2, hy, 13);
       c.fill();
       c.fillStyle = '#1b1b22';
-      U.circle(c, x + w / 2, hy, 4);
+      U.circle(c, x + w / 2, hy, 4.5);
       c.fill();
+      c.restore();
 
-      // Label
-      U.text(c, 'PULL', x + w / 2, top - 16, { size: 10, weight: 900, color: '#ffd166' });
+      // Power percentage & title
+      const pct = Math.round(this.power * 100);
+      U.text(c, 'PULL', x + w / 2, top - 24, { size: 10, weight: 900, color: '#a9a3d1' });
+      U.text(c, `${pct}%`, x + w / 2, top - 11, { size: 11, weight: 900, color: pct > 75 ? '#ff5d6c' : '#ffd166' });
     }
   }
 

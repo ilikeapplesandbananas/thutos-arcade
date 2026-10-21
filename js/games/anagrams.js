@@ -2,11 +2,19 @@
 (function (A) {
   const { U, Sound, Words } = A;
 
-  // Good 6-letter seeds that guarantee dozens of valid 3, 4, 5 and 6-letter anagrams
+  // 66 rich 6-letter seeds that guarantee dozens of valid 3, 4, 5 and 6-letter anagrams
   const SEEDS = [
     'PLANET', 'STREAM', 'MASTER', 'GARDEN', 'SPRING', 'SILVER',
     'WINTER', 'CASTLE', 'FLOWER', 'FRIEND', 'FOREST', 'DANCER',
-    'LISTEN', 'PRINCE', 'ORANGE', 'MONKEY', 'RESCUE', 'SIMPLE'
+    'LISTEN', 'PRINCE', 'ORANGE', 'MONKEY', 'RESCUE', 'SIMPLE',
+    'BRIDGE', 'CANDLE', 'DOCTOR', 'FARMER', 'HUNTER', 'ISLAND',
+    'JUNGLE', 'KNIGHT', 'LEMONS', 'MARKET', 'NATURE', 'PALACE',
+    'PENCIL', 'POCKET', 'RABBIT', 'SAILOR', 'SHADOW', 'TIGERS',
+    'TRAVEL', 'VALLEY', 'WIZARD', 'YELLOW', 'BEAUTY', 'BREEZE',
+    'CHANCE', 'CLOVER', 'DRAGON', 'EAGLES', 'FLIGHT', 'FROZEN',
+    'GOLDEN', 'HARBOR', 'HEROES', 'IMPACT', 'LEGEND', 'MAGNET',
+    'MEADOW', 'MIRROR', 'ROCKET', 'SEASON', 'TEMPLE', 'VICTOR',
+    'ARTIST', 'BASKET', 'CAMERA', 'DESERT', 'ENERGY', 'FATHER'
   ];
 
   class AnagramsGame extends A.Game {
@@ -257,10 +265,26 @@
           const s1 = this.scores[1];
           const winner = s0 > s1 ? 0 : s1 > s0 ? 1 : -1;
 
+          // Word breakdown data
+          const p0List = Array.from(this.foundWords[0]).map(w => ({ word: w, pts: Words.anagramScore(w.length) }))
+            .sort((a, b) => b.pts - a.pts || a.word.localeCompare(b.word));
+          const p1List = Array.from(this.foundWords[1]).map(w => ({ word: w, pts: Words.anagramScore(w.length) }))
+            .sort((a, b) => b.pts - a.pts || a.word.localeCompare(b.word));
+          const missedList = this.validWords
+            .filter(w => !this.foundWords[0].has(w) && !this.foundWords[1].has(w))
+            .map(w => ({ word: w, pts: Words.anagramScore(w.length) }))
+            .sort((a, b) => b.pts - a.pts || a.word.localeCompare(b.word))
+            .slice(0, 50);
+
           this.finish({
             winner,
             title: winner === -1 ? 'Draw!' : `${this.playerName(winner)} wins!`,
-            text: `${this.playerName(0)}: ${s0} pts (${this.foundWords[0].size} words) · ${this.playerName(1)}: ${s1} pts (${this.foundWords[1].size} words)`
+            text: `${this.playerName(0)}: ${s0} pts (${p0List.length} words) · ${this.playerName(1)}: ${s1} pts (${p1List.length} words)`,
+            words: {
+              p0: p0List,
+              p1: p1List,
+              missed: missedList
+            }
           });
         }
       });

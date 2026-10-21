@@ -64,19 +64,22 @@
       this.streak = 0;
       this.onFire = false;
       this.timeLeft = 30.0;
-      this.hoop.moving = false;
+      // Moving hoop activates in Round 2 or when score >= 10
+      this.hoop.moving = (playerIdx === 1) || (this.scores[playerIdx] >= 10);
       this.hoop.x = this.hoop.baseX;
       this.activeRound = true;
       this.spawnBall();
 
-      this.banner(playerIdx === 0 ? 'START!' : `${this.playerName(playerIdx)}'S TURN!`, { color: '#ffd166', dur: 1.2 });
+      const bannerText = playerIdx === 0 ? 'START!' : `${this.playerName(playerIdx)}'S TURN!`;
+      const subText = this.hoop.moving ? 'ROUND 2 · MOVING HOOP!' : '';
+      this.banner(bannerText, { color: '#ffd166', dur: 1.2, sub: subText });
       Sound.whistle ? Sound.whistle() : Sound.good();
 
       if (this.cpuTurn) {
         this.status(`CPU is shooting...`);
         this.scheduleCpuShots();
       } else {
-        this.status(`Flick upward to shoot! Streak 3 to catch FIRE!`);
+        this.status(this.hoop.moving ? `Round 2: Moving hoop! Flick to shoot!` : `Flick upward to shoot! Streak 3 to catch FIRE!`);
       }
     }
 
@@ -231,17 +234,19 @@
       // Interactive net swish cradle physics
       if (b.scored && b.inAir) {
         const rimY = this.hoop.y;
-        if (b.y >= rimY - 8 && b.y <= rimY + 70) {
-          // Ball is travelling inside the net: net catches & drags ball
-          n.vStretch += 380 * dt;
-          n.vBulge += 260 * dt;
-          n.swayX = U.clamp((b.x - this.hoop.x) * 0.45, -16, 16);
+        if (b.y >= rimY - 12 && b.y <= rimY + 85) {
+          // Ball is travelling inside the net: net catches, stretches, bulges & sways
+          const netPct = (b.y - rimY + 12) / 97;
+          n.vStretch += 460 * dt;
+          n.vBulge += 380 * Math.sin(netPct * Math.PI) * dt;
+          n.swayX += (b.x - this.hoop.x) * 1.5 * dt;
 
-          // Dampen ball downward velocity and guide through funnel
-          b.vy = Math.min(b.vy, 320);
-          b.vx *= 0.86;
-        } else if (b.y > rimY + 70 && b.y < rimY + 105) {
-          if (n.vStretch < 50) n.vStretch = 120;
+          // Funnel ball through center with gentle drag
+          b.vy = Math.min(b.vy, 280);
+          b.vx *= 0.82;
+          b.x += (this.hoop.x - b.x) * 0.18;
+        } else if (b.y > rimY + 85 && b.y < rimY + 125) {
+          if (n.vStretch < 80) n.vStretch = 150;
         }
       }
 
@@ -260,7 +265,7 @@
       const boardW = 140;
       const boardH = 100;
 
-      if (b.z >= 0.95 && b.z <= 1.15 && b.vy < 0) {
+      if (b.z >= 0.94 && b.z <= 1.20 && b.vy < 0) {
         if (Math.abs(b.x - this.hoop.x) < boardW / 2 && b.y > boardY && b.y < boardY + boardH) {
           b.vz = -Math.abs(b.vz) * 0.45;
           b.vx += (b.x - this.hoop.x) * 0.6;
@@ -268,34 +273,45 @@
         }
       }
 
-      // Rim collisions (left and right rims)
+      // Rim & Basket detection (at hoop depth z ~= 0.85 to 1.25)
       const rimY = this.hoop.y;
       const rimW = this.hoop.width;
       const leftRimX = this.hoop.x - rimW / 2;
       const rightRimX = this.hoop.x + rimW / 2;
 
-      if (b.z >= 0.88 && b.z <= 1.12) {
-        // Left rim
-        const dLeft = U.dist(b.x, b.y, leftRimX, rimY);
-        if (dLeft < this.ballRadius * (1 - b.z * 0.45) + 6) {
-          b.vx = -Math.abs(b.vx) * 0.6 - 60;
-          b.vy = -Math.abs(b.vy) * 0.55;
-          b.hitRim = true;
-          Sound.rim();
-        }
-        // Right rim
-        const dRight = U.dist(b.x, b.y, rightRimX, rimY);
-        if (dRight < this.ballRadius * (1 - b.z * 0.45) + 6) {
-          b.vx = Math.abs(b.vx) * 0.6 + 60;
-          b.vy = -Math.abs(b.vy) * 0.55;
-          b.hitRim = true;
-          Sound.rim();
+      if (b.z >= 0.82 && b.z <= 1.25) {
+        // 1. Swish / Basket detection (evaluated FIRST so valid shots are never rejected by rim beads)
+        const dxFromCenter = b.x - this.hoop.x;
+        const dyFromRim = b.y - rimY;
+
+        if (!b.scored && b.vy > 30 && Math.abs(dxFromCenter) < rimW * 0.46 && dyFromRim >= -16 && dyFromRim <= 32) {
+          b.scored = true;
+          b.vx = (this.hoop.x - b.x) * 3;
+          b.vy = Math.min(b.vy, 280);
+          this.scoreBasket();
         }
 
-        // Swish / Basket detection (passes downward through center of rim)
-        if (!b.scored && b.vy > 100 && Math.abs(b.x - this.hoop.x) < rimW * 0.44 && Math.abs(b.y - rimY) < 24) {
-          b.scored = true;
-          this.scoreBasket();
+        // 2. Rim collision (evaluated only if ball has not already scored)
+        if (!b.scored && b.z >= 0.85 && b.z <= 1.18) {
+          const effectiveR = this.ballRadius * (1 - b.z * 0.45) * 0.62 + 5;
+          const dLeft = U.dist(b.x, b.y, leftRimX, rimY);
+          const dRight = U.dist(b.x, b.y, rightRimX, rimY);
+
+          if (dLeft < effectiveR) {
+            const nx = (b.x - leftRimX) / (dLeft || 1);
+            b.vx = nx * 140 - 45;
+            b.vy = -Math.abs(b.vy) * 0.52 - 30;
+            b.hitRim = true;
+            this.net.vSwayX -= 40;
+            Sound.rim();
+          } else if (dRight < effectiveR) {
+            const nx = (b.x - rightRimX) / (dRight || 1);
+            b.vx = nx * 140 + 45;
+            b.vy = -Math.abs(b.vy) * 0.52 - 30;
+            b.hitRim = true;
+            this.net.vSwayX += 40;
+            Sound.rim();
+          }
         }
       }
 

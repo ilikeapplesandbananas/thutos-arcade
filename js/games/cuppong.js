@@ -222,47 +222,48 @@
       b.z += b.vz * dt;
       b.vy += 1150 * dt; // gravity
 
-      // Table surface bounce (when z reaches ~0.8 and y is on table surface)
-      if (!b.bounced && b.z >= 0.75 && b.z <= 0.95 && b.y > 260 && b.y < 540) {
-        b.bounced = true;
-        b.vy = -Math.abs(b.vy) * 0.58;
-        b.vz *= 0.8;
-        Sound.tap();
-        this.fx.burst(b.x, b.y, 6, { color: '#ffd166', speed: 50, life: 0.3 });
-      }
-
-      // Sinking vortex animation into cup
+      // Sinking vortex animation into cup with 3D swirl
       if (b.sinking) {
         b.sinking.t += dt;
         const k = Math.min(1, b.sinking.t / b.sinking.dur);
         const cup = b.sinking.cup;
-        const angle = k * Math.PI * 4;
-        const rad = (1 - k) * (cup.r * 0.45);
+        const startAng = b.sinking.startAngle || 0;
+        const angle = startAng + k * Math.PI * 5;
+        const rad = (1 - k * 0.82) * (cup.r * 0.68);
         b.x = cup.x + Math.cos(angle) * rad;
-        b.y = cup.y + 2 + Math.sin(angle) * (rad * 0.35) + k * 8;
-        b.scale = (b.sinking.startScale || 0.55) * (1 - k * 0.42);
-        b.alpha = 1 - k * 0.5;
+        b.y = cup.y + 2 + Math.sin(angle) * (rad * 0.38) + k * 12;
+        b.scale = (b.sinking.startScale || 0.55) * (1 - k * 0.45);
+        b.alpha = 1 - k * 0.4;
         return;
       }
 
-      // Cup collisions (active target rack)
+      // Table surface bounce (when ball descends onto lower wooden table)
+      if (!b.bounced && b.vy > 0 && b.y >= 360 && b.y <= 580 && Math.abs(b.x - this.table.x) < 170) {
+        b.bounced = true;
+        b.vy = -Math.abs(b.vy) * 0.60;
+        b.vz *= 0.85;
+        Sound.tap();
+        this.fx.burst(b.x, b.y, 8, { color: '#ffd166', speed: 60, life: 0.35 });
+      }
+
+      // Cup collisions (active target rack, evaluated whenever ball is descending over rack)
       const targetCups = this.cups[this.turn];
-      if (b.z >= 0.85 && b.z <= 1.15 && !b.sunk && !b.sinking) {
+      if (b.vy > 0 && b.y >= 180 && b.y <= 360 && !b.sunk && !b.sinking) {
         for (const cup of targetCups) {
           if (cup.sunk) continue;
           const dist = U.dist(b.x, b.y, cup.x, cup.y);
 
           // Direct swish or bounce into cup opening
-          if (dist < cup.r * 0.85 && b.vy > 30) {
+          if (dist < cup.r * 0.92) {
             this.handleSink(cup);
             return;
           }
-          // Rim bounce
-          else if (dist < cup.r * 1.25 && b.vy > 0) {
+          // Rim bounce (if hitting outer rim edge)
+          else if (dist < cup.r * 1.32) {
             const nx = (b.x - cup.x) / dist;
             const ny = (b.y - cup.y) / dist;
-            b.vx += nx * 140;
-            b.vy = -Math.abs(b.vy) * 0.5;
+            b.vx = nx * 140;
+            b.vy = -Math.abs(b.vy) * 0.52 - 35;
             Sound.rim();
             break;
           }
@@ -270,7 +271,7 @@
       }
 
       // Ball missed / landed off table
-      if (b.y > this.H + 40 || b.z > 1.35) {
+      if (b.y > this.H + 40 || b.z > 1.45) {
         this.finishShot(false);
       }
     }
@@ -281,9 +282,10 @@
         cup,
         startX: b.x,
         startY: b.y,
+        startAngle: Math.atan2(b.y - cup.y, b.x - cup.x),
         startScale: 1 - b.z * 0.48,
         t: 0,
-        dur: 0.55
+        dur: 0.60
       };
       b.vx = 0;
       b.vy = 0;
@@ -292,7 +294,7 @@
       this.fx.burst(cup.x, cup.y, 25, { colors: ['#ffd166', '#ff5d6c', '#fff', '#fcc419'], speed: 160, life: 0.65 });
       this.banner('CUP SUNK!', { color: '#ffd166', dur: 1.2 });
 
-      this.wait(700, () => {
+      this.wait(750, () => {
         cup.sunk = true;
         b.sunk = true;
         b.sinking = null;

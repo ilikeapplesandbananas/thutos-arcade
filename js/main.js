@@ -236,6 +236,39 @@
           </div>
         `;
 
+        // Word breakdown display for word games
+        const wb = $('wordBreakdown');
+        if (result.words) {
+          wb.style.display = 'block';
+          $('wbTitle0').textContent = `${meName} (${result.words.p0.length})`;
+          $('wbTitle1').textContent = `${mode === 'cpu' ? 'CPU' : p2Name} (${result.words.p1.length})`;
+
+          const renderPills = list => list.length
+            ? list.map(item => `<span class="wb-tag">${item.word.toUpperCase()} <small>+${item.pts}</small></span>`).join('')
+            : '<span class="wb-empty">No words</span>';
+
+          $('wbList0').innerHTML = renderPills(result.words.p0);
+          $('wbList1').innerHTML = renderPills(result.words.p1);
+
+          const missedBox = $('wbMissed');
+          missedBox.style.display = 'none';
+          const revealBtn = $('wbRevealBtn');
+          revealBtn.textContent = `Reveal Missed Words 👁️ (${result.words.missed.length})`;
+
+          revealBtn.onclick = () => {
+            const isHidden = missedBox.style.display === 'none';
+            missedBox.style.display = isHidden ? 'block' : 'none';
+            revealBtn.textContent = isHidden ? 'Hide Missed Words 🙈' : `Reveal Missed Words 👁️ (${result.words.missed.length})`;
+            if (isHidden) {
+              $('wbMissedList').innerHTML = result.words.missed.length
+                ? result.words.missed.map(item => `<span class="wb-tag missed">${item.word.toUpperCase()} <small>+${item.pts}</small></span>`).join('')
+                : '<span class="wb-empty">None! You found everything!</span>';
+            }
+          };
+        } else {
+          wb.style.display = 'none';
+        }
+
         $('trophy').innerHTML = result.winner >= 0 ? ICONS.trophy : ICONS.handshake;
         $('results').classList.add('open');
       }

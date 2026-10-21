@@ -417,7 +417,7 @@
 
   A.register({
     id: 'darts',
-    name: 'Darts (301)',
+    name: 'Darts',
     category: 'Sports',
     tag: 'Classic Pub 301',
     icon: A.ICONS.darts,

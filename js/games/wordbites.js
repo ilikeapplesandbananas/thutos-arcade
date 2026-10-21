@@ -465,10 +465,29 @@
           const s1 = this.scores[1];
           const winner = s0 > s1 ? 0 : s1 > s0 ? 1 : -1;
 
+          // Word breakdown data
+          const allFormations = this.findWordFormations();
+          const p0List = Array.from(this.foundWords[0]).map(w => ({ word: w, pts: Words.bitesScore(w.length) }))
+            .sort((a, b) => b.pts - a.pts || a.word.localeCompare(b.word));
+          const p1List = Array.from(this.foundWords[1]).map(w => ({ word: w, pts: Words.bitesScore(w.length) }))
+            .sort((a, b) => b.pts - a.pts || a.word.localeCompare(b.word));
+
+          const uniquePossible = Array.from(new Set(allFormations.map(f => f.word)));
+          const missedList = uniquePossible
+            .filter(w => !this.foundWords[0].has(w) && !this.foundWords[1].has(w))
+            .map(w => ({ word: w, pts: Words.bitesScore(w.length) }))
+            .sort((a, b) => b.pts - a.pts || a.word.localeCompare(b.word))
+            .slice(0, 50);
+
           this.finish({
             winner,
             title: winner === -1 ? 'Draw!' : `${this.playerName(winner)} wins!`,
-            text: `${this.playerName(0)}: ${s0} pts (${this.foundWords[0].size} words) · ${this.playerName(1)}: ${s1} pts (${this.foundWords[1].size} words)`
+            text: `${this.playerName(0)}: ${s0} pts (${p0List.length} words) · ${this.playerName(1)}: ${s1} pts (${p1List.length} words)`,
+            words: {
+              p0: p0List,
+              p1: p1List,
+              missed: missedList
+            }
           });
         }
       });

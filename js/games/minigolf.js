@@ -67,6 +67,72 @@
       hazards: [
         { type: 'water', x: 290, y: 450, rx: 45, ry: 30 }
       ]
+    },
+    // Hole 4: The Windmill Chute (Par 3)
+    {
+      par: 3,
+      start: { x: 210, y: 660 },
+      hole: { x: 210, y: 150 },
+      walls: [
+        { ax: 70, ay: 90, bx: 350, by: 90 },
+        { ax: 350, ay: 90, bx: 350, by: 700 },
+        { ax: 350, ay: 700, bx: 70, by: 700 },
+        { ax: 70, ay: 700, bx: 70, by: 90 },
+        // Chute funnels
+        { ax: 70, ay: 430, bx: 160, by: 360 },
+        { ax: 350, ay: 430, bx: 260, by: 360 },
+        { ax: 160, ay: 360, bx: 160, by: 260 },
+        { ax: 260, ay: 360, bx: 260, by: 260 }
+      ],
+      bumpers: [
+        { x: 130, y: 520, r: 20 },
+        { x: 290, y: 520, r: 20 }
+      ],
+      hazards: [
+        { type: 'sand', x: 210, y: 210, rx: 40, ry: 25 }
+      ]
+    },
+    // Hole 5: Island Moat (Par 3)
+    {
+      par: 3,
+      start: { x: 210, y: 660 },
+      hole: { x: 210, y: 160 },
+      walls: [
+        { ax: 60, ay: 100, bx: 360, by: 100 },
+        { ax: 360, ay: 100, bx: 360, by: 700 },
+        { ax: 360, ay: 700, bx: 60, by: 700 },
+        { ax: 60, ay: 700, bx: 60, by: 100 }
+      ],
+      bumpers: [
+        { x: 210, y: 380, r: 26 }
+      ],
+      hazards: [
+        { type: 'water', x: 120, y: 320, rx: 45, ry: 60 },
+        { type: 'water', x: 300, y: 320, rx: 45, ry: 60 }
+      ]
+    },
+    // Hole 6: The Grand Slalom (Par 4)
+    {
+      par: 4,
+      start: { x: 120, y: 660 },
+      hole: { x: 300, y: 160 },
+      walls: [
+        { ax: 60, ay: 100, bx: 360, by: 100 },
+        { ax: 360, ay: 100, bx: 360, by: 700 },
+        { ax: 360, ay: 700, bx: 60, by: 700 },
+        { ax: 60, ay: 700, bx: 60, by: 100 },
+        // Slalom barriers
+        { ax: 60, ay: 490, bx: 270, by: 490 },
+        { ax: 150, ay: 310, bx: 360, by: 310 }
+      ],
+      bumpers: [
+        { x: 310, y: 560, r: 22 },
+        { x: 110, y: 380, r: 22 },
+        { x: 210, y: 220, r: 20 }
+      ],
+      hazards: [
+        { type: 'sand', x: 210, y: 400, rx: 45, ry: 30 }
+      ]
     }
   ];
 
@@ -82,7 +148,7 @@
       this.holeFinished = [false, false];
 
       this.r = 8.5; // golf ball radius
-      this.ball = { x: 0, y: 0, vx: 0, vy: 0, inHole: false };
+      this.ball = { x: 0, y: 0, vx: 0, vy: 0, scale: 1, alpha: 1, inHole: false, sinking: null };
       this.pullAim = null;
       this.moving = false;
 
@@ -106,7 +172,10 @@
       this.ball.y = this.course.start.y;
       this.ball.vx = 0;
       this.ball.vy = 0;
+      this.ball.scale = 1;
+      this.ball.alpha = 1;
       this.ball.inHole = false;
+      this.ball.sinking = null;
       this.moving = false;
       this.pullAim = null;
     }
@@ -154,21 +223,34 @@
 
     /* ---------- CPU AI ---------- */
     cpuPutt() {
-      if (!this.cpuTurn || this.over || this.moving || this.ball.inHole) return;
+      if (!this.cpuTurn || this.over || this.moving || this.ball.inHole || this.ball.sinking) return;
 
+      this._cpuPuttPending = true;
       this.wait(700, () => {
-        if (!this.cpuTurn || this.over || this.moving || this.ball.inHole) return;
+        this._cpuPuttPending = false;
+        if (!this.cpuTurn || this.over || this.moving || this.ball.inHole || this.ball.sinking) return;
 
         let target = this.course.hole;
 
-        // Hole 3 is a dogleg: route around the elbow corner
+        // Waypoint navigation for doglegs, chokes & slaloms
         if (this.currentHole === 2) {
+          // Hole 3 dogleg
           if (this.ball.y > 470 && this.ball.x < 190) {
-            // Need to reach the elbow first
             target = { x: 130, y: 460 };
           } else if (this.ball.y > 430 && this.ball.x < 240) {
-            // Turning the corner
-            target = { x: 270, y: 440 };
+            target = { x: 280, y: 440 };
+          }
+        } else if (this.currentHole === 3) {
+          // Hole 4 Windmill Chute
+          if (this.ball.y > 380) {
+            target = { x: 210, y: 340 };
+          }
+        } else if (this.currentHole === 5) {
+          // Hole 6 Grand Slalom
+          if (this.ball.y > 490) {
+            target = { x: 300, y: 500 };
+          } else if (this.ball.y > 310) {
+            target = { x: 120, y: 320 };
           }
         }
 
@@ -194,22 +276,34 @@
 
     /* ---------- Physics Loop ---------- */
     update(dt) {
-      // Sinking spiral animation into cup
+      // Sinking spiral animation into cup with 3D lip roll
       if (this.ball.sinking) {
         this.ball.sinking.t += dt;
         const k = Math.min(1, this.ball.sinking.t / this.ball.sinking.dur);
         const hole = this.course.hole;
-        const angle = k * Math.PI * 4;
-        const rad = (1 - k) * 7;
+        const startAng = this.ball.sinking.startAngle || 0;
+        const angle = startAng + k * Math.PI * 4;
+        const rad = (1 - k * 0.88) * 8;
         this.ball.x = hole.x + Math.cos(angle) * rad;
-        this.ball.y = hole.y + Math.sin(angle) * (rad * 0.45);
-        this.ball.scale = 1 - k * 0.65;
-        this.ball.alpha = 1 - k * 0.8;
+        this.ball.y = hole.y + Math.sin(angle) * (rad * 0.55) + k * 2.5;
+        this.ball.scale = 1 - k * 0.55;
+        this.ball.alpha = 1 - k * 0.65;
         if (k >= 1) {
           this.ball.inHole = true;
           this.ball.sinking = null;
           this.ball.scale = 0;
         }
+      }
+
+      // Watchdog: ensures CPU never gets stuck or halts on any hole
+      if (this.cpuTurn && !this.moving && !this.ball.inHole && !this.over && !this.ball.sinking) {
+        this.cpuIdleTimer = (this.cpuIdleTimer || 0) + dt;
+        if (this.cpuIdleTimer > 1.4 && !this._cpuPuttPending) {
+          this.cpuIdleTimer = 0;
+          this.cpuPutt();
+        }
+      } else {
+        this.cpuIdleTimer = 0;
       }
 
       if (!this.moving) return;
@@ -323,7 +417,10 @@
 
     sinkHole(isCap = false) {
       this.moving = false;
-      this.ball.sinking = { t: 0, dur: 0.42, startX: this.ball.x, startY: this.ball.y };
+      this.ball.vx = 0;
+      this.ball.vy = 0;
+      const startAngle = Math.atan2(this.ball.y - this.course.hole.y, this.ball.x - this.course.hole.x);
+      this.ball.sinking = { t: 0, dur: 0.52, startAngle, startX: this.ball.x, startY: this.ball.y };
       this.holeFinished[this.turn] = true;
 
       Sound.pocket();

@@ -31,6 +31,16 @@
       this.drawSway = 0;
       this.inFlight = null;
 
+      this.animTime = 0;
+      this.leaves = Array.from({ length: 14 }, () => ({
+        x: U.rand(0, this.W),
+        y: U.rand(120, this.H - 120),
+        size: U.rand(4, 7),
+        speed: U.rand(35, 75),
+        rot: U.rand(0, Math.PI * 2),
+        vrot: U.rand(-3, 3)
+      }));
+
       this.rollWind();
       this.updateHUD();
     }
@@ -110,6 +120,21 @@
 
     /* ---------- Animation & Scoring ---------- */
     update(dt) {
+      this.animTime += dt;
+
+      // Update blowing leaves based on wind
+      if (this.leaves) {
+        const windSpeed = this.wind * 55;
+        for (const l of this.leaves) {
+          l.x += (windSpeed + (this.wind >= 0 ? l.speed : -l.speed)) * dt;
+          l.y += Math.sin(this.animTime * 3 + l.rot) * 16 * dt + 14 * dt;
+          l.rot += l.vrot * dt;
+          if (l.x > this.W + 20) l.x = -20;
+          if (l.x < -20) l.x = this.W + 20;
+          if (l.y > this.H) l.y = 100;
+        }
+      }
+
       // Natural sight sway while aiming
       if (this.drawing) {
         this.drawSway += dt * 3.5;
@@ -230,14 +255,136 @@
 
     /* ---------- Rendering ---------- */
     renderBackdrop(c, w, h) {
-      // Sunny outdoor archery field with grassy lawn and open sky
+      // 1. Sky and turf terrain
       const sky = c.createLinearGradient(0, 0, 0, h);
-      sky.addColorStop(0, '#1c1b3b');
-      sky.addColorStop(0.5, '#282458');
-      sky.addColorStop(0.52, '#2f8a42'); // Grass horizon
-      sky.addColorStop(1, '#1b5a26');
+      sky.addColorStop(0, '#151433');
+      sky.addColorStop(0.46, '#282458');
+      sky.addColorStop(0.48, '#2e7d32'); // Horizon
+      sky.addColorStop(1, '#1b5e20');
       c.fillStyle = sky;
       c.fillRect(0, 0, w, h);
+
+      // 2. Drifting clouds in the breeze
+      c.save();
+      c.fillStyle = 'rgba(255, 255, 255, 0.12)';
+      const cloudShift = (this.animTime * (this.wind * 10 + 12)) % (w + 240);
+      [
+        { x: 70, y: 75, r: 32 },
+        { x: 230, y: 95, r: 42 },
+        { x: 380, y: 65, r: 28 }
+      ].forEach(cl => {
+        let cx = (cl.x + cloudShift) % (w + 140);
+        if (cx < -70) cx += w + 140;
+        U.circle(c, cx, cl.y, cl.r); c.fill();
+        U.circle(c, cx + cl.r * 0.7, cl.y + 4, cl.r * 0.75); c.fill();
+        U.circle(c, cx - cl.r * 0.7, cl.y + 6, cl.r * 0.65); c.fill();
+      });
+      c.restore();
+
+      // 3. Swaying trees on the left and right edges
+      const treeSway = this.wind * 0.042 + Math.sin(this.animTime * 2.6) * 0.018 * (Math.abs(this.wind) + 0.6);
+      this.renderSwayingTree(c, 36, 430, 1.0, treeSway);
+      this.renderSwayingTree(c, w - 36, 430, -1.0, treeSway * 0.85);
+
+      // 4. Animated clothesline with flapping laundry
+      this.renderClothesline(c);
+
+      // 5. Blowing leaf flecks
+      c.save();
+      for (const l of this.leaves) {
+        c.save();
+        c.translate(l.x, l.y);
+        c.rotate(l.rot);
+        c.fillStyle = 'rgba(102, 187, 106, 0.75)';
+        c.beginPath();
+        c.ellipse(0, 0, l.size, l.size * 0.45, 0, 0, Math.PI * 2);
+        c.fill();
+        c.restore();
+      }
+      c.restore();
+    }
+
+    renderSwayingTree(c, x, baseY, dir, sway) {
+      c.save();
+      c.translate(x, baseY);
+      c.rotate(sway * dir);
+
+      // Tree trunk
+      c.fillStyle = '#4e342e';
+      c.fillRect(-6, -110, 12, 110);
+
+      // 3 tiers of pine foliage
+      const layers = [
+        { y: -80, w: 56, h: 45, col: '#1b5e20' },
+        { y: -115, w: 46, h: 40, col: '#2e7d32' },
+        { y: -145, w: 34, h: 35, col: '#388e3c' }
+      ];
+      for (const lyr of layers) {
+        c.fillStyle = lyr.col;
+        c.beginPath();
+        c.moveTo(0, lyr.y - lyr.h);
+        c.lineTo(-lyr.w / 2, lyr.y);
+        c.lineTo(lyr.w / 2, lyr.y);
+        c.closePath();
+        c.fill();
+      }
+      c.restore();
+    }
+
+    renderClothesline(c) {
+      const p1x = 75, p2x = 345, topY = 460;
+
+      c.save();
+      // Wooden fence posts
+      c.fillStyle = '#6d4c41';
+      c.fillRect(p1x - 3, topY - 10, 6, 65);
+      c.fillRect(p2x - 3, topY - 10, 6, 65);
+
+      // Sagging clothesline rope
+      c.strokeStyle = 'rgba(235, 235, 245, 0.7)';
+      c.lineWidth = 1.8;
+      c.beginPath();
+      c.moveTo(p1x, topY);
+      c.quadraticCurveTo(this.W / 2, topY + 14, p2x, topY);
+      c.stroke();
+
+      // Flapping laundry items
+      const items = [
+        { x: 135, y: topY + 7, w: 26, h: 36, col: '#3d8bff', name: 'towel' },
+        { x: 210, y: topY + 12, w: 30, h: 40, col: '#ffd166', name: 'shirt' },
+        { x: 285, y: topY + 7, w: 24, h: 32, col: '#ff5d6c', name: 'cloth' }
+      ];
+
+      items.forEach((item, idx) => {
+        const flutter = Math.sin(this.animTime * 7 + idx * 1.5) * (Math.abs(this.wind) * 4.2 + 2);
+        const billowX = this.wind * 9 + flutter;
+
+        c.save();
+        // Clothes pins
+        c.fillStyle = '#d7ccc8';
+        c.fillRect(item.x - 3, item.y - 4, 6, 5);
+
+        // Laundry fabric quadrilateral billowing in the wind
+        c.fillStyle = item.col;
+        c.beginPath();
+        c.moveTo(item.x - item.w / 2, item.y);
+        c.lineTo(item.x + item.w / 2, item.y);
+        c.lineTo(item.x + item.w / 2 + billowX, item.y + item.h);
+        c.lineTo(item.x - item.w / 2 + billowX, item.y + item.h);
+        c.closePath();
+        c.fill();
+
+        // Shading fold lines
+        c.strokeStyle = 'rgba(0,0,0,0.15)';
+        c.lineWidth = 1.2;
+        c.beginPath();
+        c.moveTo(item.x, item.y);
+        c.lineTo(item.x + billowX * 0.8, item.y + item.h);
+        c.stroke();
+        c.restore();
+      });
+
+      c.restore();
     }
 
     render(c) {

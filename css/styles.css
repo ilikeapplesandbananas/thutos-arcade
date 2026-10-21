@@ -161,8 +161,23 @@ svg{display:block}
 .rs small{display:block;font-size:12px;color:var(--dim);font-weight:700;margin-top:4px}
 .loading{position:absolute;inset:0;z-index:15;display:none;place-items:center;align-content:center;gap:14px;color:var(--muted);font-weight:800;background:#0b0920}
 .loading.open{display:grid}
-.spinner{width:46px;height:46px;border-radius:50%;border:4px solid rgba(255,255,255,.12);border-top-color:var(--yellow);animation:spin .8s linear infinite;justify-self:center}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* Word Breakdown in Results Modal */
+.word-breakdown{width:100%;margin-top:10px;text-align:left}
+.wb-columns{display:flex;gap:10px;max-height:160px;overflow-y:auto;padding-right:4px}
+.wb-col{flex:1;background:rgba(0,0,0,.22);border-radius:14px;padding:8px 10px;display:flex;flex-direction:column}
+.wb-col h4{font-size:12px;font-weight:800;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.wb-list{display:flex;flex-wrap:wrap;gap:4px;overflow-y:auto;max-height:120px}
+.wb-tag{display:inline-flex;align-items:center;gap:4px;padding:3px 7px;border-radius:8px;background:rgba(255,255,255,.08);font-size:11px;font-weight:800;color:#fff}
+.wb-tag small{color:var(--yellow);font-weight:900}
+.wb-tag.missed{background:rgba(255,93,108,.15);border:1px solid rgba(255,93,108,.35)}
+.wb-tag.missed small{color:var(--pink)}
+.wb-empty{font-size:11px;color:var(--dim);font-style:italic}
+.wb-reveal-btn{width:100%;margin-top:8px;font-size:12px;font-weight:800;border:1px dashed rgba(255,255,255,.2);height:36px;border-radius:10px}
+.wb-missed{margin-top:8px;background:rgba(0,0,0,.3);border-radius:14px;padding:10px;border:1px solid rgba(255,255,255,.08)}
+.wb-missed h4{font-size:11px;font-weight:800;color:var(--pink);margin-bottom:6px;text-transform:uppercase}
+.wb-missed-list{max-height:130px;overflow-y:auto}
 
 /* ---------- Responsive ---------- */
 @media (max-width:860px){
