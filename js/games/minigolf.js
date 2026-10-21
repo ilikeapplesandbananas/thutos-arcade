@@ -156,27 +156,62 @@
     cpuPutt() {
       if (!this.cpuTurn || this.over || this.moving || this.ball.inHole) return;
 
-      this.wait(800, () => {
-        if (!this.cpuTurn || this.over) return;
-        const target = this.course.hole;
+      this.wait(700, () => {
+        if (!this.cpuTurn || this.over || this.moving || this.ball.inHole) return;
+
+        let target = this.course.hole;
+
+        // Hole 3 is a dogleg: route around the elbow corner
+        if (this.currentHole === 2) {
+          if (this.ball.y > 470 && this.ball.x < 190) {
+            // Need to reach the elbow first
+            target = { x: 130, y: 460 };
+          } else if (this.ball.y > 430 && this.ball.x < 240) {
+            // Turning the corner
+            target = { x: 270, y: 440 };
+          }
+        }
+
         const dx = target.x - this.ball.x;
         const dy = target.y - this.ball.y;
         const dist = Math.hypot(dx, dy);
-        const accuracy = this.cpuSkill(0.68, 0.85, 0.96);
 
+        // Difficulty calibration:
+        // Easy: 48% accuracy, wider angle spread
+        // Medium: 78% accuracy
+        // Hard: 96% accuracy, optimal line & speed
+        const accuracy = this.cpuSkill(0.48, 0.78, 0.96);
         let aimX = dx, aimY = dy;
         if (Math.random() > accuracy) {
-          aimX += U.gauss() * 25;
-          aimY += U.gauss() * 25;
+          aimX += U.gauss() * (1 - accuracy) * 75;
+          aimY += U.gauss() * (1 - accuracy) * 75;
         }
 
-        const pwrDist = Math.min(130, dist * 0.45);
+        const pwrDist = Math.min(130, dist * 0.42);
         this.putt(aimX, aimY, pwrDist);
       });
     }
 
     /* ---------- Physics Loop ---------- */
     update(dt) {
+      // Sinking spiral animation into cup
+      if (this.ball.sinking) {
+        this.ball.sinking.t += dt;
+        const k = Math.min(1, this.ball.sinking.t / this.ball.sinking.dur);
+        const hole = this.course.hole;
+        const angle = k * Math.PI * 4;
+        const rad = (1 - k) * 7;
+        this.ball.x = hole.x + Math.cos(angle) * rad;
+        this.ball.y = hole.y + Math.sin(angle) * (rad * 0.45);
+        this.ball.scale = 1 - k * 0.65;
+        this.ball.alpha = 1 - k * 0.8;
+        if (k >= 1) {
+          this.ball.inHole = true;
+          this.ball.sinking = null;
+          this.ball.scale = 0;
+        }
+      }
+
       if (!this.moving) return;
 
       const sub = 8;
@@ -200,7 +235,7 @@
         this.ball.vx *= friction;
         this.ball.vy *= friction;
 
-        // Check water hazard (penalty + reset)
+        // Check water hazard (penalty + reset — NEVER freezes CPU)
         for (const h of this.course.hazards) {
           if (h.type === 'water' && U.dist(this.ball.x, this.ball.y, h.x, h.y) < h.rx) {
             Sound.splash();
@@ -210,6 +245,15 @@
             this.totalScores[this.turn]++;
             this.resetBallToStart();
             this.updateHUD();
+
+            if (this.strokes[this.turn] >= 7) {
+              this.sinkHole(true);
+              return;
+            }
+
+            if (this.cpuTurn) {
+              this.wait(900, () => this.cpuPutt());
+            }
             return;
           }
         }
@@ -224,7 +268,7 @@
           this.ball.vx += (hole.x - this.ball.x) * 14 * sdt;
           this.ball.vy += (hole.y - this.ball.y) * 14 * sdt;
 
-          if (dHole < 10 && ballSpeed < 320) {
+          if (dHole < 10 && ballSpeed < 340) {
             this.sinkHole();
             return;
           }
@@ -277,22 +321,19 @@
       }
     }
 
-    sinkHole() {
+    sinkHole(isCap = false) {
       this.moving = false;
-      this.ball.inHole = true;
-      this.ball.x = this.course.hole.x;
-      this.ball.y = this.course.hole.y;
-      this.ball.vx = 0;
-      this.ball.vy = 0;
+      this.ball.sinking = { t: 0, dur: 0.42, startX: this.ball.x, startY: this.ball.y };
       this.holeFinished[this.turn] = true;
 
       Sound.pocket();
-      this.fx.burst(this.ball.x, this.ball.y, 25, { colors: U.CONFETTI, speed: 180, life: 0.8 });
+      this.fx.burst(this.course.hole.x, this.course.hole.y, 25, { colors: U.CONFETTI, speed: 180, life: 0.8 });
 
       const par = this.course.par;
       const count = this.strokes[this.turn];
       let term = 'PAR';
-      if (count === 1) term = 'HOLE IN ONE! 🌟';
+      if (isCap) term = 'MAX STROKES (+7)';
+      else if (count === 1) term = 'HOLE IN ONE! 🌟';
       else if (count === par - 1) term = 'BIRDIE! 🦅';
       else if (count === par + 1) term = 'BOGEY';
       else if (count > par + 1) term = `+${count - par}`;
@@ -332,7 +373,12 @@
     }
 
     switchTurnOrContinue() {
-      // In GamePigeon, player continues putting until sunk, or alternating
+      // Stroke cap check (max 7 strokes per hole)
+      if (this.strokes[this.turn] >= 7) {
+        this.sinkHole(true);
+        return;
+      }
+
       if (this.cpuTurn) {
         this.cpuPutt();
       }
@@ -430,25 +476,37 @@
         c.restore();
       }
 
-      // 5. Hole Cup & Red Flag Stick
+      // 5. Hole Cup & Red Flag Stick with 3D drop depth
       const hole = this.course.hole;
-      c.fillStyle = '#080a0c';
+      c.save();
+      // Outer drop shadow on green turf
+      c.fillStyle = 'rgba(0,0,0,0.55)';
+      U.circle(c, hole.x, hole.y + 1.5, 14);
+      c.fill();
+
+      // Deep dark cup cylinder
+      const cupGrad = c.createRadialGradient(hole.x, hole.y, 2, hole.x, hole.y, 12);
+      cupGrad.addColorStop(0, '#030406');
+      cupGrad.addColorStop(0.75, '#0a0d14');
+      cupGrad.addColorStop(1, '#253240');
+      c.fillStyle = cupGrad;
       U.circle(c, hole.x, hole.y, 11);
       c.fill();
-      c.strokeStyle = '#fff';
-      c.lineWidth = 1.5;
+      c.strokeStyle = '#f8f9fa';
+      c.lineWidth = 1.8;
       c.stroke();
 
       // Flag pole + pennant
-      c.fillStyle = '#fff';
-      c.fillRect(hole.x - 1.5, hole.y - 40, 3, 40);
+      c.fillStyle = '#ffffff';
+      c.fillRect(hole.x - 1.5, hole.y - 42, 3, 42);
       c.fillStyle = '#ff5d6c';
       c.beginPath();
-      c.moveTo(hole.x + 1.5, hole.y - 40);
-      c.lineTo(hole.x + 24, hole.y - 30);
-      c.lineTo(hole.x + 1.5, hole.y - 20);
+      c.moveTo(hole.x + 1.5, hole.y - 42);
+      c.lineTo(hole.x + 25, hole.y - 32);
+      c.lineTo(hole.x + 1.5, hole.y - 22);
       c.closePath();
       c.fill();
+      c.restore();
 
       // 6. Aim Guideline & Power Arrow (when pulling back)
       if (this.pullAim && !this.moving && !this.ball.inHole) {
@@ -482,14 +540,26 @@
         }
       }
 
-      // 7. Golf Ball
-      if (!this.ball.inHole) {
-        U.ball(c, this.ball.x, this.ball.y, this.r, '#ffffff', { light: '#ffffff', dark: '#d0d4dc' });
+      // 7. Golf Ball (visible when not in hole, or when sinking)
+      if (!this.ball.inHole || this.ball.sinking) {
+        c.save();
+        const scale = this.ball.scale != null ? this.ball.scale : 1;
+        const r = this.r * scale;
+        if (this.ball.alpha != null) c.globalAlpha = Math.max(0, Math.min(1, this.ball.alpha));
+
+        // Ball shadow
+        c.fillStyle = 'rgba(0,0,0,0.32)';
+        c.beginPath();
+        c.ellipse(this.ball.x, this.ball.y + r * 0.85, r * 0.9, r * 0.45, 0, 0, Math.PI * 2);
+        c.fill();
+
+        U.ball(c, this.ball.x, this.ball.y, r, '#ffffff', { light: '#ffffff', dark: '#d0d4dc' });
         // Dimples
         c.fillStyle = '#ced4da';
-        U.circle(c, this.ball.x - 2, this.ball.y - 2, 1.2); c.fill();
-        U.circle(c, this.ball.x + 2, this.ball.y - 1, 1.2); c.fill();
-        U.circle(c, this.ball.x - 1, this.ball.y + 2, 1.2); c.fill();
+        U.circle(c, this.ball.x - 2 * scale, this.ball.y - 2 * scale, 1.2 * scale); c.fill();
+        U.circle(c, this.ball.x + 2 * scale, this.ball.y - 1 * scale, 1.2 * scale); c.fill();
+        U.circle(c, this.ball.x - 1 * scale, this.ball.y + 2 * scale, 1.2 * scale); c.fill();
+        c.restore();
       }
     }
   }

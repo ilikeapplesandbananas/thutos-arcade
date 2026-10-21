@@ -76,7 +76,7 @@
       const cy = this.ty + this.th * 0.72; // Cue ball near bottom
 
       // Cue ball (id: 0)
-      this.cueBall = { id: 0, x: cx, y: cy, vx: 0, vy: 0, sunk: false, type: 'cue' };
+      this.cueBall = { id: 0, x: cx, y: cy, vx: 0, vy: 0, r: this.r, sunk: false, type: 'cue' };
       this.balls.push(this.cueBall);
 
       const rackY = this.ty + this.th * 0.28;
@@ -105,6 +105,7 @@
               y: rowY,
               vx: 0,
               vy: 0,
+              r: this.r,
               sunk: false,
               type
             });
@@ -131,6 +132,7 @@
               y: rowY,
               vx: 0,
               vy: 0,
+              r: this.r,
               sunk: false,
               type: id === 9 ? 'nine' : 'ball'
             });
@@ -160,6 +162,10 @@
           if (!overlap) {
             this.cueBall.x = p.x;
             this.cueBall.y = p.y;
+            this.cueBall.sunk = false;
+            this.cueBall.sinking = null;
+            this.cueBall.vx = 0;
+            this.cueBall.vy = 0;
             this.ballInHand = false;
             this.status(`${this.playerName(this.turn)}: Ball placed. Aim and shoot!`);
             Sound.tap();
@@ -270,12 +276,12 @@
 
           // Check pocket drops
           for (const p of this.pockets) {
-            if (U.dist(b.x, b.y, p.x, p.y) < p.r * 0.95) {
+            if (!b.sinking && !b.sunk && U.dist(b.x, b.y, p.x, p.y) < p.r * 0.95) {
               this.pocketBall(b, p);
               break;
             }
           }
-          if (b.sunk) continue;
+          if (b.sunk || b.sinking) continue;
 
           // Cushion bounds
           let hitRail = false;
@@ -289,7 +295,7 @@
         }
 
         // Ball-to-ball elastic collisions
-        const active = this.balls.filter(b => !b.sunk);
+        const active = this.balls.filter(b => !b.sunk && !b.sinking);
         for (let i = 0; i < active.length; i++) {
           for (let j = i + 1; j < active.length; j++) {
             const b1 = active[i];
@@ -297,7 +303,7 @@
             const dx = b2.x - b1.x;
             const dy = b2.y - b1.y;
             const dist = Math.hypot(dx, dy);
-            const minDist = this.r * 2;
+            const minDist = (b1.r || this.r) + (b2.r || this.r);
 
             if (dist > 0 && dist < minDist) {
               const nx = dx / dist;
@@ -329,8 +335,26 @@
         }
       }
 
+      // Sinking ball animations into pockets
+      for (const b of this.balls) {
+        if (b.sinking) {
+          b.sinking.t += dt;
+          const k = Math.min(1, b.sinking.t / b.sinking.dur);
+          b.x = U.lerp(b.sinking.startX, b.sinking.px, k);
+          b.y = U.lerp(b.sinking.startY, b.sinking.py, k);
+          b.scale = 1 - k * 0.65;
+          b.alpha = 1 - k * 0.85;
+          if (k >= 1) {
+            b.sunk = true;
+            b.sinking = null;
+            b.vx = 0;
+            b.vy = 0;
+          }
+        }
+      }
+
       // Check if all balls have come to rest
-      const stillMoving = this.balls.some(b => !b.sunk && Math.hypot(b.vx, b.vy) > 1);
+      const stillMoving = this.balls.some(b => b.sinking || (!b.sunk && Math.hypot(b.vx, b.vy) > 1));
       if (!stillMoving) {
         this.moving = false;
         this.resolveTurn();
@@ -338,11 +362,19 @@
     }
 
     pocketBall(b, p) {
-      b.sunk = true;
-      b.vx = 0;
-      b.vy = 0;
+      if (b.sinking || b.sunk) return;
+      b.sinking = {
+        px: p.x,
+        py: p.y,
+        startX: b.x,
+        startY: b.y,
+        t: 0,
+        dur: 0.35
+      };
+      b.vx = (p.x - b.x) * 3;
+      b.vy = (p.y - b.y) * 3;
       Sound.pocket();
-      this.fx.burst(p.x, p.y, 8, { color: '#ffd166', speed: 60, life: 0.5 });
+      this.fx.burst(p.x, p.y, 14, { color: '#ffd166', speed: 90, life: 0.5 });
 
       if (b.id === 0) {
         this.scratch = true;
@@ -353,6 +385,10 @@
 
     /* ---------- Game Rules & Turn Resolution ---------- */
     resolveTurn() {
+      if (this.cueBall.sunk) {
+        this.scratch = true;
+      }
+
       const p = this.turn;
       const opp = 1 - p;
 
@@ -523,14 +559,18 @@
       if (this.over || !this.cpuTurn) return;
 
       if (this.ballInHand) {
-        // Place cue ball in good position
-        this.cueBall.x = this.tx + this.tw / 2 + U.rand(-40, 40);
-        this.cueBall.y = this.ty + this.th * 0.65;
+        // Place cue ball in good position behind head string
+        this.cueBall.x = this.tx + this.tw / 2 + U.rand(-35, 35);
+        this.cueBall.y = this.ty + this.th * 0.68;
+        this.cueBall.sunk = false;
+        this.cueBall.sinking = null;
+        this.cueBall.vx = 0;
+        this.cueBall.vy = 0;
         this.ballInHand = false;
       }
 
       const playerGroup = this.groups[1];
-      let candidateBalls = this.balls.filter(b => !b.sunk && b.id !== 0);
+      let candidateBalls = this.balls.filter(b => !b.sunk && !b.sinking && b.id !== 0);
 
       if (this.variant === '8ball') {
         if (playerGroup) {
@@ -544,7 +584,7 @@
         candidateBalls = candidateBalls.filter(b => b.id === lowest);
       }
 
-      if (!candidateBalls.length) candidateBalls = this.balls.filter(b => !b.sunk && b.id !== 0);
+      if (!candidateBalls.length) candidateBalls = this.balls.filter(b => !b.sunk && !b.sinking && b.id !== 0);
 
       // Find best target ball + pocket combination
       let bestShot = null;
@@ -559,8 +599,8 @@
           const tpNormY = tpY / tpDist;
 
           // Ghost ball center position
-          const gx = target.x - tpNormX * (this.r * 2);
-          const gy = target.y - tpNormY * (this.r * 2);
+          const gx = target.x - tpNormX * ((target.r || this.r) * 2);
+          const gy = target.y - tpNormY * ((target.r || this.r) * 2);
 
           // Vector from cue ball to ghost ball
           const cgX = gx - this.cueBall.x;
@@ -569,31 +609,36 @@
 
           // Dot product between cue->ghost and target->pocket (closer to 1 is a direct straight-in shot)
           const cut = (cgX * tpNormX + cgY * tpNormY) / cgDist;
-          if (cut < 0.1) continue; // too sharp a cut angle
+          if (cut < 0.08) continue; // too sharp a cut angle
 
-          const score = cut * 200 - tpDist * 0.3 - cgDist * 0.2;
+          const score = cut * 240 - tpDist * 0.25 - cgDist * 0.15;
           if (score > bestScore) {
             bestScore = score;
-            bestShot = { gx, gy, dist: cgDist, target };
+            bestShot = { gx, gy, dist: cgDist, target, cut };
           }
         }
       }
 
-      const skill = this.cpuSkill(0.7, 0.88, 0.98);
+      // Difficulty calibration:
+      // Easy: 42% accuracy, sub-optimal choices, noticeable noise
+      // Medium: 78% accuracy, solid cut shots
+      // Hard: 96% accuracy, calculates ghost ball collision angle & power
+      const skill = this.cpuSkill(0.42, 0.78, 0.96);
       let aimAngle;
       if (bestShot && Math.random() < skill) {
         aimAngle = Math.atan2(bestShot.gy - this.cueBall.y, bestShot.gx - this.cueBall.x);
-        aimAngle += U.gauss() * (1 - skill) * 0.05;
+        aimAngle += U.gauss() * (1 - skill) * 0.06;
       } else {
-        const fallback = U.pick(candidateBalls);
+        const fallback = U.pick(candidateBalls) || { x: this.tx + this.tw / 2, y: this.ty + this.th * 0.28 };
         aimAngle = Math.atan2(fallback.y - this.cueBall.y, fallback.x - this.cueBall.x);
+        if (Math.random() > skill) aimAngle += U.gauss() * 0.15;
       }
 
       this.aimAngle = aimAngle;
       this.status(`CPU is lining up a shot...`);
 
-      this.wait(700, () => {
-        const pwr = U.rand(0.45, 0.85);
+      this.wait(600, () => {
+        const pwr = this.cpuSkill(U.rand(0.4, 0.65), U.rand(0.55, 0.8), U.rand(0.65, 0.9));
         this.shoot(pwr);
       });
     }
@@ -738,14 +783,31 @@
       U.circle(c, x + w / 2, this.ty + this.th * 0.28, 3);
       c.fill();
 
-      // 3. Pockets
+      // 3. Pockets with 3D drop depth and leather rim
       for (const p of this.pockets) {
-        c.fillStyle = '#070b0e';
+        c.save();
+        // Outer drop shadow on table cloth
+        c.fillStyle = 'rgba(0,0,0,0.55)';
+        U.circle(c, p.x, p.y + 1.5, p.r + 3);
+        c.fill();
+
+        // Dark leather rim / pocket mouth
+        c.fillStyle = '#18120c';
+        U.circle(c, p.x, p.y, p.r + 1.5);
+        c.fill();
+        c.strokeStyle = '#382b20';
+        c.lineWidth = 2;
+        c.stroke();
+
+        // 3D inner cup depth gradient
+        const innerGrad = c.createRadialGradient(p.x, p.y, 2, p.x, p.y, p.r);
+        innerGrad.addColorStop(0, '#020305');
+        innerGrad.addColorStop(0.75, '#080a10');
+        innerGrad.addColorStop(1, '#181a26');
+        c.fillStyle = innerGrad;
         U.circle(c, p.x, p.y, p.r);
         c.fill();
-        c.strokeStyle = '#3d2516';
-        c.lineWidth = 3;
-        c.stroke();
+        c.restore();
       }
 
       // 4. Aiming Guidelines (when aiming & not moving)
@@ -790,9 +852,9 @@
         this.renderCueStick(c);
       }
 
-      // 5. Balls
+      // 5. Balls (renders visible and sinking balls)
       for (const b of this.balls) {
-        if (!b.sunk) this.renderBall(c, b);
+        if (!b.sunk || b.sinking) this.renderBall(c, b);
       }
 
       // 6. Ball-in-hand placement indicator
@@ -811,8 +873,10 @@
     }
 
     renderBall(c, b) {
-      const { x, y, r, id, type } = b;
+      const r = (b.r || this.r) * (b.scale || 1);
+      const { x, y, id, type } = b;
       c.save();
+      if (b.alpha != null) c.globalAlpha = Math.max(0, Math.min(1, b.alpha));
 
       // Drop shadow
       c.fillStyle = 'rgba(0,0,0,0.32)';

@@ -192,8 +192,15 @@
     runCpuSolving() {
       if (!this.activeRound || !this.cpuTurn) return;
 
-      const cpuCount = this.cpuSkill(12, 22, 34);
-      const targets = U.shuffle(this.validWords.slice()).slice(0, cpuCount);
+      const cpuCount = this.cpuSkill(10, 20, 32);
+
+      // Difficulty sorting: Hard targets the 5 and 6 letter anagrams first; Easy stays on 3 letters
+      const sorted = this.validWords.slice().sort((a, b) => {
+        if (this.diff === 'hard') return b.length - a.length || (Math.random() - 0.5);
+        if (this.diff === 'easy') return a.length - b.length || (Math.random() - 0.5);
+        return Math.random() - 0.5;
+      });
+      const targets = sorted.slice(0, cpuCount);
 
       let idx = 0;
       const solveNext = () => {
@@ -203,10 +210,11 @@
         this.scores[1] += pts;
         this.foundWords[1].add(w);
 
+        Sound.letter(Math.min(6, w.length));
         this.banner(`+${pts} (${w.toUpperCase()})`, { color: '#ff5d6c', dur: 0.8, size: 26 });
         this.updateHUD();
 
-        const delay = this.cpuSkill(U.rand(2800, 3800), U.rand(2000, 2800), U.rand(1300, 2000));
+        const delay = this.cpuSkill(U.rand(3000, 4200), U.rand(2000, 2800), U.rand(1200, 1900));
         this.wait(delay, solveNext);
       };
 

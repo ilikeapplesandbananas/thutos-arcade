@@ -67,22 +67,37 @@
     }
 
     layoutTray(list) {
-      let curX = 22, curY = 480;
-      for (const b of list) {
-        if (!b.placed) {
-          const bw = b.w * this.cellSize + (b.w - 1) * this.cellGap;
-          const bh = b.h * this.cellSize + (b.h - 1) * this.cellGap;
-          if (curX + bw > this.W - 20) {
-            curX = 22;
-            curY += 56;
-          }
-          b.trayX = curX;
-          b.trayY = curY;
-          b.x = curX;
-          b.y = curY;
-          curX += bw + 12;
-        }
-      }
+      const hPairs = list.filter(b => b.orientation === 'H');
+      const vPairs = list.filter(b => b.orientation === 'V');
+      const singles = list.filter(b => b.orientation === 'S');
+
+      // Row 1: Horizontal pairs (3 blocks: 79x38px each)
+      const hXs = [36, 170, 304];
+      const hY = 492;
+      hPairs.forEach((b, i) => {
+        b.trayX = hXs[i] !== undefined ? hXs[i] : 36;
+        b.trayY = hY;
+        if (!b.placed) { b.x = b.trayX; b.y = b.trayY; }
+      });
+
+      // Row 2: Vertical pairs (3 blocks: 38x79px each)
+      const vXs = [75, 191, 307];
+      const vY = 544;
+      vPairs.forEach((b, i) => {
+        b.trayX = vXs[i] !== undefined ? vXs[i] : 75;
+        b.trayY = vY;
+        if (!b.placed) { b.x = b.trayX; b.y = b.trayY; }
+      });
+
+      // Row 3 & 4: Singles (8 blocks: 38x38px each, 4 per row)
+      const sXs = [45, 129, 213, 297];
+      const sY1 = 638;
+      const sY2 = 688;
+      singles.forEach((b, i) => {
+        b.trayX = sXs[i % 4];
+        b.trayY = i < 4 ? sY1 : sY2;
+        if (!b.placed) { b.x = b.trayX; b.y = b.trayY; }
+      });
     }
 
     startRound(playerIdx) {
@@ -120,7 +135,25 @@
     onDown(p) {
       if (!this.activeRound || this.cpuTurn) return;
 
-      // Find top-most block under touch
+      // 1. Check Recall All Button
+      if (p.x >= this.W - 130 && p.x <= this.W - 10 && p.y >= 465 && p.y <= 495) {
+        let recalled = 0;
+        for (const b of this.blocks) {
+          if (b.placed) {
+            this.removeBlockFromGrid(b);
+            b.x = b.trayX;
+            b.y = b.trayY;
+            recalled++;
+          }
+        }
+        if (recalled > 0) {
+          Sound.click();
+          this.scanGridForWords();
+        }
+        return;
+      }
+
+      // 2. Find top-most block under touch
       for (let i = this.blocks.length - 1; i >= 0; i--) {
         const b = this.blocks[i];
         const bw = b.w * this.cellSize + (b.w - 1) * this.cellGap;
@@ -161,7 +194,7 @@
         Sound.tap();
         this.scanGridForWords();
       } else {
-        // Return to tray
+        // Return to designated tray slot
         b.placed = false;
         b.x = b.trayX;
         b.y = b.trayY;
@@ -210,7 +243,7 @@
 
     /* ---------- Crossword Word Scanning ---------- */
     scanGridForWords() {
-      // 1. Scan all horizontal words (left-to-right)
+      // 1. Scan all horizontal words (left-to-right, minLen = 2)
       for (let r = 0; r < this.rows; r++) {
         let current = '';
         for (let c = 0; c < this.cols; c++) {
@@ -218,14 +251,14 @@
           if (ch !== null) {
             current += ch;
           } else {
-            if (current.length >= 3) this.checkWordMatch(current);
+            if (current.length >= 2) this.checkWordMatch(current);
             current = '';
           }
         }
-        if (current.length >= 3) this.checkWordMatch(current);
+        if (current.length >= 2) this.checkWordMatch(current);
       }
 
-      // 2. Scan all vertical words (top-to-bottom)
+      // 2. Scan all vertical words (top-to-bottom, minLen = 2)
       for (let c = 0; c < this.cols; c++) {
         let current = '';
         for (let r = 0; r < this.rows; r++) {
@@ -233,57 +266,167 @@
           if (ch !== null) {
             current += ch;
           } else {
-            if (current.length >= 3) this.checkWordMatch(current);
+            if (current.length >= 2) this.checkWordMatch(current);
             current = '';
           }
         }
-        if (current.length >= 3) this.checkWordMatch(current);
+        if (current.length >= 2) this.checkWordMatch(current);
       }
     }
 
     checkWordMatch(word) {
       const w = word.toLowerCase();
-      if (!this.foundWords[this.round].has(w) && Words.isWord(w)) {
+      if (!this.foundWords[this.round].has(w) && Words.isWord(w, 2)) {
         const pts = Words.huntScore(w.length);
         this.scores[this.round] += pts;
         this.foundWords[this.round].add(w);
 
         Sound.good();
-        this.banner(`+${pts} (${word})`, { color: '#3ee0b0', dur: 1.0, size: 28 });
+        this.banner(`+${pts} (${word.toUpperCase()})`, { color: '#3ee0b0', dur: 1.0, size: 28 });
         this.fx.burst(this.W / 2, this.gridY + this.gridH / 2, 18, { colors: ['#ffd166', '#3ee0b0'], speed: 140, life: 0.6 });
         this.updateHUD();
       }
     }
 
-    /* ---------- CPU Automation ---------- */
-    runCpuSolving() {
-      if (!this.activeRound || !this.cpuTurn) return;
+    /* ---------- Candidate Formations for CPU ---------- */
+    findWordFormations() {
+      const hPool = [...this.blocks.filter(b => b.orientation === 'H'), ...this.blocks.filter(b => b.orientation === 'S')];
+      const vPool = [...this.blocks.filter(b => b.orientation === 'V'), ...this.blocks.filter(b => b.orientation === 'S')];
 
-      const cpuCount = this.cpuSkill(6, 12, 18);
-      let count = 0;
+      const formations = [];
+      const usedH = new Set();
+      const usedV = new Set();
 
-      const makeCpuMove = () => {
-        if (!this.activeRound || !this.cpuTurn || count >= cpuCount) return;
-        const unplaced = this.blocks.filter(b => !b.placed);
-        if (unplaced.length) {
-          const b = U.pick(unplaced);
-          // Try random grid cells
-          for (let attempt = 0; attempt < 25; attempt++) {
-            const col = U.randInt(0, this.cols - b.w);
-            const row = U.randInt(0, this.rows - b.h);
-            if (this.canPlaceBlock(b, col, row)) {
-              this.placeBlockOnGrid(b, col, row);
-              this.scanGridForWords();
-              count++;
-              break;
+      const searchH = (prefix, blockList) => {
+        if (prefix.length >= 2 && Words.isWord(prefix, 2)) {
+          formations.push({ word: prefix, blocks: [...blockList], orientation: 'H' });
+        }
+        if (prefix.length >= 6) return;
+
+        for (let i = 0; i < hPool.length; i++) {
+          if (!usedH.has(i)) {
+            const b = hPool[i];
+            const nextStr = prefix + b.letters.join('').toLowerCase();
+            if (Words.hasPrefix(nextStr)) {
+              usedH.add(i);
+              blockList.push(b);
+              searchH(nextStr, blockList);
+              blockList.pop();
+              usedH.delete(i);
             }
           }
         }
-        const delay = this.cpuSkill(U.rand(3200, 4200), U.rand(2400, 3200), U.rand(1600, 2400));
+      };
+
+      const searchV = (prefix, blockList) => {
+        if (prefix.length >= 2 && Words.isWord(prefix, 2)) {
+          formations.push({ word: prefix, blocks: [...blockList], orientation: 'V' });
+        }
+        if (prefix.length >= 6) return;
+
+        for (let i = 0; i < vPool.length; i++) {
+          if (!usedV.has(i)) {
+            const b = vPool[i];
+            const nextStr = prefix + b.letters.join('').toLowerCase();
+            if (Words.hasPrefix(nextStr)) {
+              usedV.add(i);
+              blockList.push(b);
+              searchV(nextStr, blockList);
+              blockList.pop();
+              usedV.delete(i);
+            }
+          }
+        }
+      };
+
+      searchH('', []);
+      searchV('', []);
+
+      return formations;
+    }
+
+    /* ---------- Intelligent CPU Solving ---------- */
+    runCpuSolving() {
+      if (!this.activeRound || !this.cpuTurn) return;
+
+      const allFormations = this.findWordFormations();
+      // Difficulty calibration:
+      // Easy: 5-7 simple 2-3 letter words
+      // Medium: 9-13 words (3-5 letters)
+      // Hard: 15-20 words (up to 6 letters)
+      const targetCount = this.cpuSkill(6, 11, 18);
+      const minWordLen = this.cpuSkill(2, 3, 3);
+      const maxWordLen = this.cpuSkill(4, 5, 6);
+
+      const filtered = allFormations.filter(f => f.word.length >= minWordLen && f.word.length <= maxWordLen);
+      const sorted = U.shuffle(filtered).sort((a, b) => {
+        return this.diff === 'hard' ? b.word.length - a.word.length : a.word.length - b.word.length;
+      });
+
+      let placedCount = 0;
+
+      const makeCpuMove = () => {
+        if (!this.activeRound || !this.cpuTurn || placedCount >= targetCount) return;
+
+        // Find a formation whose blocks are currently unplaced
+        for (const f of sorted) {
+          const allFree = f.blocks.every(b => !b.placed);
+          if (!allFree) continue;
+
+          let success = false;
+          if (f.orientation === 'H') {
+            const totalW = f.blocks.reduce((acc, b) => acc + b.w, 0);
+            for (let r = 0; r < this.rows && !success; r++) {
+              for (let col = 0; col <= this.cols - totalW && !success; col++) {
+                // Check if all cells empty
+                let canFit = true;
+                for (let i = 0; i < totalW; i++) {
+                  if (this.grid[r][col + i] !== null) { canFit = false; break; }
+                }
+                if (canFit) {
+                  let curC = col;
+                  for (const b of f.blocks) {
+                    this.placeBlockOnGrid(b, curC, r);
+                    curC += b.w;
+                  }
+                  success = true;
+                }
+              }
+            }
+          } else {
+            const totalH = f.blocks.reduce((acc, b) => acc + b.h, 0);
+            for (let col = 0; col < this.cols && !success; col++) {
+              for (let r = 0; r <= this.rows - totalH && !success; r++) {
+                let canFit = true;
+                for (let i = 0; i < totalH; i++) {
+                  if (this.grid[r + i][col] !== null) { canFit = false; break; }
+                }
+                if (canFit) {
+                  let curR = r;
+                  for (const b of f.blocks) {
+                    this.placeBlockOnGrid(b, col, curR);
+                    curR += b.h;
+                  }
+                  success = true;
+                }
+              }
+            }
+          }
+
+          if (success) {
+            placedCount++;
+            Sound.tap();
+            this.scanGridForWords();
+            break;
+          }
+        }
+
+        // Delay between moves: Easy ~3.6s, Medium ~2.6s, Hard ~1.6s
+        const delay = this.cpuSkill(U.rand(3400, 4400), U.rand(2400, 3200), U.rand(1500, 2200));
         this.wait(delay, makeCpuMove);
       };
 
-      this.wait(2000, makeCpuMove);
+      this.wait(1400, makeCpuMove);
     }
 
     /* ---------- Timer & Round Loop ---------- */
@@ -380,9 +523,25 @@
 
       // 3. Tray Area Background Divider
       c.fillStyle = 'rgba(255,255,255,0.05)';
-      U.rr(c, 14, 465, this.W - 28, 260, 20);
+      U.rr(c, 14, 462, this.W - 28, 280, 20);
       c.fill();
-      U.text(c, 'LETTER TRAY · DRAG TO BOARD', this.W / 2, 475, { size: 11, color: '#7a74a8', weight: 900 });
+      U.text(c, 'LETTER TRAY · DRAG TO BOARD', 130, 480, { size: 10, color: '#8882b5', weight: 800 });
+
+      // Recall button
+      c.fillStyle = 'rgba(255,255,255,0.12)';
+      U.rr(c, this.W - 124, 468, 102, 24, 12);
+      c.fill();
+      U.text(c, 'RECALL ALL ↺', this.W - 73, 480, { size: 10, color: '#ffd166', weight: 900 });
+
+      // Ghost slot guides showing neat organizer arrangement
+      for (const b of this.blocks) {
+        const bw = b.w * this.cellSize + (b.w - 1) * this.cellGap;
+        const bh = b.h * this.cellSize + (b.h - 1) * this.cellGap;
+        c.strokeStyle = 'rgba(255,255,255,0.08)';
+        c.lineWidth = 1.5;
+        U.rr(c, b.trayX, b.trayY, bw, bh, 8);
+        c.stroke();
+      }
 
       // 4. Letter Blocks (rendered in tray and on grid)
       for (const b of this.blocks) {

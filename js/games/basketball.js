@@ -33,6 +33,16 @@
       this.spawnY = this.H - 140;
       this.ballRadius = 32;
 
+      // 3D Net spring dynamics
+      this.net = {
+        bulge: 0,
+        vBulge: 0,
+        stretch: 0,
+        vStretch: 0,
+        swayX: 0,
+        vSwayX: 0
+      };
+
       // Ball state
       this.ball = null;
       this.trail = [];
@@ -139,7 +149,7 @@
     scheduleCpuShots() {
       if (!this.activeRound || !this.cpuTurn) return;
 
-      const shootInterval = this.cpuSkill(1900, 1500, 1200);
+      const shootInterval = this.cpuSkill(1300, 950, 700);
       this.wait(shootInterval, () => {
         if (!this.activeRound || !this.cpuTurn) return;
         if (!this.ball || this.ball.inAir) {
@@ -148,16 +158,17 @@
         }
 
         // Calculate lead on moving hoop
-        const targetX = this.hoop.x + (this.hoop.moving ? this.hoop.moveDir * 18 : 0);
+        const lead = this.hoop.moving ? this.hoop.moveDir * this.cpuSkill(10, 18, 25) : 0;
+        const targetX = this.hoop.x + lead;
         const aimDx = targetX - this.ball.x;
-        const accuracy = this.cpuSkill(0.68, 0.82, 0.94);
+        const accuracy = this.cpuSkill(0.50, 0.74, 0.92);
 
         let dx = aimDx * 0.8;
         if (Math.random() > accuracy) {
-          dx += U.gauss() * 45;
+          dx += U.gauss() * (1 - accuracy) * 110;
         }
 
-        const dy = -260 + U.rand(-20, 20);
+        const dy = -260 + U.rand(-16, 16);
         this.shootBall(dx, dy, 0.18);
         this.scheduleCpuShots();
       });
@@ -198,11 +209,14 @@
         }
       }
 
-      // 3. Net animation decay
-      if (this.hoop.netPhase > 0) {
-        this.hoop.netPhase -= dt * 4;
-        if (this.hoop.netPhase < 0) this.hoop.netPhase = 0;
-      }
+      // 3. 3D Net spring physics simulation
+      const n = this.net;
+      n.vBulge += (-n.bulge * 140 - n.vBulge * 14) * dt;
+      n.bulge += n.vBulge * dt;
+      n.vStretch += (-n.stretch * 125 - n.vStretch * 12) * dt;
+      n.stretch += n.vStretch * dt;
+      n.vSwayX += (-n.swayX * 110 - n.vSwayX * 11) * dt;
+      n.swayX += n.vSwayX * dt;
 
       // 4. Ball motion & collisions
       const b = this.ball;
@@ -213,6 +227,23 @@
       b.z += b.vz * dt;
       b.vy += 1250 * dt; // gravity
       b.rot += b.vrot * dt;
+
+      // Interactive net swish cradle physics
+      if (b.scored && b.inAir) {
+        const rimY = this.hoop.y;
+        if (b.y >= rimY - 8 && b.y <= rimY + 70) {
+          // Ball is travelling inside the net: net catches & drags ball
+          n.vStretch += 380 * dt;
+          n.vBulge += 260 * dt;
+          n.swayX = U.clamp((b.x - this.hoop.x) * 0.45, -16, 16);
+
+          // Dampen ball downward velocity and guide through funnel
+          b.vy = Math.min(b.vy, 320);
+          b.vx *= 0.86;
+        } else if (b.y > rimY + 70 && b.y < rimY + 105) {
+          if (n.vStretch < 50) n.vStretch = 120;
+        }
+      }
 
       // Particle trail for On Fire
       if (this.onFire) {
@@ -262,7 +293,7 @@
         }
 
         // Swish / Basket detection (passes downward through center of rim)
-        if (!b.scored && b.vy > 120 && Math.abs(b.x - this.hoop.x) < rimW * 0.42 && Math.abs(b.y - rimY) < 22) {
+        if (!b.scored && b.vy > 100 && Math.abs(b.x - this.hoop.x) < rimW * 0.44 && Math.abs(b.y - rimY) < 24) {
           b.scored = true;
           this.scoreBasket();
         }
@@ -376,10 +407,13 @@
       }
       c.restore();
 
-      // 2. Backboard & Hoop Assembly
-      this.renderHoop(c);
+      // 2. Backboard & rear rim arc
+      this.renderBackboardAndRearRim(c);
 
-      // 3. Ball Fire Trail (behind ball)
+      // 3. Rear half of 3D net (behind the ball)
+      this.renderNetMesh(c, false);
+
+      // 4. Ball Fire Trail (behind ball)
       if (this.onFire && this.trail.length > 1) {
         for (let i = 1; i < this.trail.length; i++) {
           const t0 = this.trail[i - 1];
@@ -394,15 +428,18 @@
         }
       }
 
-      // 4. Basketball
+      // 5. Basketball (drawn inside the hoop volume)
       if (this.ball) {
         this.renderBall(c);
       }
 
-      // 5. Net Front Ring (renders in front of ball as it drops through net)
+      // 6. Front half of 3D net (cradles and covers ball in front)
+      this.renderNetMesh(c, true);
+
+      // 7. Front half of metallic orange rim
       this.renderFrontRim(c);
 
-      // 6. Streak / Clock HUD on-court banner
+      // 8. Streak / Clock HUD on-court banner
       c.fillStyle = 'rgba(0,0,0,0.35)';
       U.rr(c, this.W / 2 - 70, 20, 140, 36, 18);
       c.fill();
@@ -413,29 +450,29 @@
       }
     }
 
-    renderHoop(c) {
+    renderBackboardAndRearRim(c) {
       const hx = this.hoop.x;
       const hy = this.hoop.y;
       const hw = this.hoop.width;
 
-      // Backboard (acrylic transparent style with white borders)
+      // Backboard (acrylic transparent style with white borders & red target square)
       const bw = 140, bh = 95;
       const bx = hx - bw / 2, by = hy - bh + 12;
 
       c.save();
-      c.shadowColor = 'rgba(0,0,0,0.5)';
-      c.shadowBlur = 14;
-      c.fillStyle = 'rgba(255,255,255,0.72)';
+      c.shadowColor = 'rgba(0,0,0,0.55)';
+      c.shadowBlur = 16;
+      c.fillStyle = 'rgba(255,255,255,0.78)';
       U.rr(c, bx, by, bw, bh, 8);
       c.fill();
       c.strokeStyle = '#e03131';
-      c.lineWidth = 3;
+      c.lineWidth = 3.5;
       c.stroke();
 
       // Inner target square
       const tw = 54, th = 40;
       c.strokeStyle = '#e03131';
-      c.lineWidth = 2.5;
+      c.lineWidth = 2.8;
       c.strokeRect(hx - tw / 2, hy - th - 2, tw, th);
       c.restore();
 
@@ -447,31 +484,77 @@
       c.strokeStyle = '#e8590c';
       c.lineWidth = 4.5;
       c.beginPath();
-      c.ellipse(hx, hy, hw / 2, 10, 0, Math.PI, 0);
+      c.ellipse(hx, hy, hw / 2, 9, 0, Math.PI, 0);
       c.stroke();
+    }
 
-      // Net (cord lattice with animated ripple on score)
-      const ripple = Math.sin(this.hoop.netPhase * Math.PI * 4) * (this.hoop.netPhase * 10);
-      const netH = 46;
+    renderNetMesh(c, isFront) {
+      const hx = this.hoop.x;
+      const hy = this.hoop.y;
+      const hw = this.hoop.width;
+      const n = this.net;
 
       c.save();
-      c.strokeStyle = 'rgba(255,255,255,0.85)';
-      c.lineWidth = 1.6;
-      for (let i = 0; i <= 6; i++) {
-        const topX = hx - hw / 2 + (hw / 6) * i;
-        const btmX = hx - hw / 3 + (hw / 4.5) * i + ripple * 0.4;
-        c.beginPath();
-        c.moveTo(topX, hy);
-        c.lineTo(btmX, hy + netH);
-        c.stroke();
+      c.lineWidth = isFront ? 1.8 : 1.3;
+      c.strokeStyle = isFront ? '#ffffff' : 'rgba(200, 205, 225, 0.42)';
 
-        const oppTopX = hx + hw / 2 - (hw / 6) * i;
-        const oppBtmX = hx + hw / 3 - (hw / 4.5) * i - ripple * 0.4;
+      // 4 horizontal rings of the net funnel
+      const rings = [
+        { y: hy, rx: hw / 2, ry: 9, sx: 0 },
+        { y: hy + 16 + n.stretch * 0.25, rx: hw * 0.44 + n.bulge * 0.35, ry: 7.5, sx: n.swayX * 0.3 },
+        { y: hy + 35 + n.stretch * 0.65, rx: hw * 0.36 + n.bulge * 0.75, ry: 6.5, sx: n.swayX * 0.7 },
+        { y: hy + 54 + n.stretch * 1.05, rx: hw * 0.30 + n.bulge * 0.40, ry: 5.5, sx: n.swayX * 1.0 }
+      ];
+
+      const numKnots = 10;
+      const knotPoints = rings.map(ring => {
+        const pts = [];
+        for (let i = 0; i < numKnots; i++) {
+          const theta = (i / numKnots) * Math.PI * 2;
+          const kx = hx + ring.sx + Math.cos(theta) * ring.rx;
+          const ky = ring.y + Math.sin(theta) * ring.ry;
+          pts.push({ x: kx, y: ky, z: Math.sin(theta) });
+        }
+        return pts;
+      });
+
+      // Draw diamond weave cords between consecutive rings
+      for (let r = 0; r < rings.length - 1; r++) {
+        const upper = knotPoints[r];
+        const lower = knotPoints[r + 1];
+
+        for (let i = 0; i < numKnots; i++) {
+          const uPt = upper[i];
+          const lPt1 = lower[i];
+          const lPt2 = lower[(i + 1) % numKnots];
+
+          const isCordFront = (uPt.z >= 0) || (lPt1.z >= 0);
+          if (isFront === isCordFront) {
+            c.beginPath();
+            c.moveTo(uPt.x, uPt.y);
+            c.lineTo(lPt1.x, lPt1.y);
+            c.stroke();
+
+            c.beginPath();
+            c.moveTo(uPt.x, uPt.y);
+            c.lineTo(lPt2.x, lPt2.y);
+            c.stroke();
+          }
+        }
+      }
+
+      // Draw horizontal knot rings
+      for (let r = 1; r < rings.length; r++) {
+        const ring = rings[r];
         c.beginPath();
-        c.moveTo(oppTopX, hy);
-        c.lineTo(oppBtmX, hy + netH);
+        if (isFront) {
+          c.ellipse(hx + ring.sx, ring.y, ring.rx, ring.ry, 0, 0, Math.PI);
+        } else {
+          c.ellipse(hx + ring.sx, ring.y, ring.rx, ring.ry, 0, Math.PI, Math.PI * 2);
+        }
         c.stroke();
       }
+
       c.restore();
     }
 
@@ -480,12 +563,21 @@
       const hy = this.hoop.y;
       const hw = this.hoop.width;
 
-      // Front half of orange metal rim (renders on top of ball)
+      // Front half of orange metal rim with 3D highlight (renders on top of ball & front net)
+      c.save();
       c.strokeStyle = '#ff6b00';
-      c.lineWidth = 4.5;
+      c.lineWidth = 5;
       c.beginPath();
-      c.ellipse(hx, hy, hw / 2, 10, 0, 0, Math.PI);
+      c.ellipse(hx, hy, hw / 2, 9, 0, 0, Math.PI);
       c.stroke();
+
+      // Top specular rim highlight
+      c.strokeStyle = '#ffa94d';
+      c.lineWidth = 1.8;
+      c.beginPath();
+      c.ellipse(hx, hy - 1, hw / 2 - 1, 8.5, 0, 0.2, Math.PI - 0.2);
+      c.stroke();
+      c.restore();
     }
 
     renderBall(c) {

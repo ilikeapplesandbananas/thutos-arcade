@@ -189,15 +189,21 @@
       const targetCups = this.cups[1].filter(c => !c.sunk);
       if (!targetCups.length) return;
 
-      this.wait(1000, () => {
+      this.wait(900, () => {
         if (!this.cpuTurn || this.over) return;
-        const target = U.pick(targetCups);
-        const accuracy = this.cpuSkill(0.55, 0.75, 0.92);
+        const accuracy = this.cpuSkill(0.42, 0.72, 0.94);
+
+        let target;
+        if (accuracy > 0.9) {
+          target = targetCups.slice().sort((a, b) => Math.abs(b.x - this.W / 2) - Math.abs(a.x - this.W / 2))[0] || U.pick(targetCups);
+        } else {
+          target = U.pick(targetCups);
+        }
 
         let tx = target.x, ty = target.y;
         if (Math.random() > accuracy) {
-          tx += U.gauss() * 28;
-          ty += U.gauss() * 32;
+          tx += U.gauss() * (1 - accuracy) * 75;
+          ty += U.gauss() * (1 - accuracy) * 85;
         }
 
         const dx = (tx - this.ball.x) * 1.1;
@@ -225,17 +231,29 @@
         this.fx.burst(b.x, b.y, 6, { color: '#ffd166', speed: 50, life: 0.3 });
       }
 
+      // Sinking vortex animation into cup
+      if (b.sinking) {
+        b.sinking.t += dt;
+        const k = Math.min(1, b.sinking.t / b.sinking.dur);
+        const cup = b.sinking.cup;
+        const angle = k * Math.PI * 4;
+        const rad = (1 - k) * (cup.r * 0.45);
+        b.x = cup.x + Math.cos(angle) * rad;
+        b.y = cup.y + 2 + Math.sin(angle) * (rad * 0.35) + k * 8;
+        b.scale = (b.sinking.startScale || 0.55) * (1 - k * 0.42);
+        b.alpha = 1 - k * 0.5;
+        return;
+      }
+
       // Cup collisions (active target rack)
       const targetCups = this.cups[this.turn];
-      if (b.z >= 0.85 && b.z <= 1.15 && !b.sunk) {
+      if (b.z >= 0.85 && b.z <= 1.15 && !b.sunk && !b.sinking) {
         for (const cup of targetCups) {
           if (cup.sunk) continue;
           const dist = U.dist(b.x, b.y, cup.x, cup.y);
 
           // Direct swish or bounce into cup opening
-          if (dist < cup.r * 0.85 && b.vy > 40) {
-            b.sunk = true;
-            cup.sunk = true;
+          if (dist < cup.r * 0.85 && b.vy > 30) {
             this.handleSink(cup);
             return;
           }
@@ -258,11 +276,26 @@
     }
 
     handleSink(cup) {
+      const b = this.ball;
+      b.sinking = {
+        cup,
+        startX: b.x,
+        startY: b.y,
+        startScale: 1 - b.z * 0.48,
+        t: 0,
+        dur: 0.55
+      };
+      b.vx = 0;
+      b.vy = 0;
+      b.vz = 0;
       Sound.splash();
-      this.fx.burst(cup.x, cup.y, 25, { colors: ['#ffd166', '#ff5d6c', '#fff'], speed: 180, life: 0.7 });
+      this.fx.burst(cup.x, cup.y, 25, { colors: ['#ffd166', '#ff5d6c', '#fff', '#fcc419'], speed: 160, life: 0.65 });
       this.banner('CUP SUNK!', { color: '#ffd166', dur: 1.2 });
 
-      this.wait(800, () => {
+      this.wait(700, () => {
+        cup.sunk = true;
+        b.sunk = true;
+        b.sinking = null;
         this.finishShot(true);
       });
     }
@@ -400,17 +433,18 @@
       const h = r * 2.8;
 
       c.save();
-      // Cup shadow
-      c.fillStyle = 'rgba(0,0,0,0.35)';
+      // Cup cast shadow on table
+      c.fillStyle = 'rgba(0,0,0,0.38)';
       c.beginPath();
-      c.ellipse(x, y + h * 0.4, r * 1.1, r * 0.45, 0, 0, Math.PI * 2);
+      c.ellipse(x, y + h * 0.45, r * 1.15, r * 0.45, 0, 0, Math.PI * 2);
       c.fill();
 
-      // Red cup trapezoid body
+      // Red cup trapezoid body with specular highlights
       const redGrad = c.createLinearGradient(x - r, y, x + r, y);
-      redGrad.addColorStop(0, '#e03131');
-      redGrad.addColorStop(0.5, '#ff6b6b');
-      redGrad.addColorStop(1, '#c92a2a');
+      redGrad.addColorStop(0, '#c92a2a');
+      redGrad.addColorStop(0.35, '#ff6b6b');
+      redGrad.addColorStop(0.7, '#e03131');
+      redGrad.addColorStop(1, '#a61e1e');
       c.fillStyle = redGrad;
 
       c.beginPath();
@@ -421,34 +455,69 @@
       c.closePath();
       c.fill();
 
-      // White inner liquid / opening
-      c.fillStyle = '#f8f9fa';
+      // Horizontal Solo cup plastic ridges
+      c.strokeStyle = 'rgba(0,0,0,0.18)';
+      c.lineWidth = 1.6;
+      [0.32, 0.58].forEach(pct => {
+        const ry = y + h * pct;
+        const rw = r * (1 - pct * 0.28);
+        c.beginPath();
+        c.ellipse(x, ry, rw, rw * 0.3, 0, 0, Math.PI);
+        c.stroke();
+      });
+
+      // White inner cup opening
+      c.fillStyle = '#f1f3f5';
       c.beginPath();
       c.ellipse(x, y, r, r * 0.38, 0, 0, Math.PI * 2);
       c.fill();
 
-      // Beer inside cup
-      c.fillStyle = '#fcc419';
+      // Rolled white outer lip rim
+      c.strokeStyle = '#ffffff';
+      c.lineWidth = 2.2;
+      c.beginPath();
+      c.ellipse(x, y, r + 0.5, (r + 0.5) * 0.38, 0, 0, Math.PI * 2);
+      c.stroke();
+
+      // Beer inside cup with surface meniscus
+      const beerGrad = c.createRadialGradient(x, y + 2, 2, x, y + 2, r * 0.85);
+      beerGrad.addColorStop(0, '#ffe066');
+      beerGrad.addColorStop(0.8, '#fcc419');
+      beerGrad.addColorStop(1, '#e67700');
+      c.fillStyle = beerGrad;
       c.beginPath();
       c.ellipse(x, y + 2, r * 0.82, r * 0.28, 0, 0, Math.PI * 2);
       c.fill();
+
+      // Foam ring around edge of liquid
+      c.strokeStyle = 'rgba(255,255,255,0.6)';
+      c.lineWidth = 1.2;
+      c.beginPath();
+      c.ellipse(x, y + 2, r * 0.80, r * 0.26, 0, 0, Math.PI * 2);
+      c.stroke();
 
       c.restore();
     }
 
     renderBall(c) {
       const b = this.ball;
-      const scale = 1 - b.z * 0.48;
-      const r = Math.max(9, 20 * scale);
+      if (!b || (b.sunk && !b.sinking)) return;
+
+      const scale = b.scale != null ? b.scale : (1 - b.z * 0.48);
+      const r = Math.max(7, 20 * scale);
+
+      c.save();
+      if (b.alpha != null) c.globalAlpha = Math.max(0, Math.min(1, b.alpha));
 
       // Ball shadow
-      c.fillStyle = 'rgba(0,0,0,0.3)';
+      c.fillStyle = 'rgba(0,0,0,0.32)';
       c.beginPath();
       c.ellipse(b.x, b.y + r * 0.9, r * 0.9, r * 0.4, 0, 0, Math.PI * 2);
       c.fill();
 
-      // White celluloid ball
+      // White celluloid ball with 3D spherical gradient & shine
       U.ball(c, b.x, b.y, r, '#ffffff', { light: '#ffffff', dark: '#d0d4dc' });
+      c.restore();
     }
   }
 

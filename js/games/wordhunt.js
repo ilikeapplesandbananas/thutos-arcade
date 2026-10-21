@@ -178,9 +178,15 @@
 
       // Find all possible words on this 4x4 grid via DFS
       const allWords = this.solveGrid();
-      const cpuFound = [];
-      const skillCount = this.cpuSkill(15, 28, 42);
-      const selectedWords = U.shuffle(allWords).slice(0, skillCount);
+      const skillCount = this.cpuSkill(12, 24, 40);
+
+      // Difficulty sorting: Hard prioritizes long high-scoring words; Easy stays with 3-4 letter words
+      const sorted = allWords.slice().sort((a, b) => {
+        if (this.diff === 'hard') return b.length - a.length || (Math.random() - 0.5);
+        if (this.diff === 'easy') return a.length - b.length || (Math.random() - 0.5);
+        return Math.random() - 0.5;
+      });
+      const selectedWords = sorted.slice(0, skillCount);
 
       let idx = 0;
       const submitNext = () => {
@@ -190,10 +196,12 @@
         this.scores[1] += pts;
         this.foundWords[1].add(w);
 
+        Sound.letter(Math.min(6, w.length));
         this.banner(`+${pts} (${w.toUpperCase()})`, { color: '#ff5d6c', dur: 0.8, size: 26 });
+        this.floatingWords.push({ text: w.toUpperCase(), pts, t: 0, dur: 1.0 });
         this.updateHUD();
 
-        const delay = this.cpuSkill(U.rand(2400, 3600), U.rand(1800, 2600), U.rand(1200, 1800));
+        const delay = this.cpuSkill(U.rand(2600, 3800), U.rand(1700, 2500), U.rand(1100, 1700));
         this.wait(delay, submitNext);
       };
 
