@@ -1,112 +1,89 @@
 ﻿# 🕹️ Thuto's Arcade
 
-> **A mobile-first browser arcade suite packed with fast-paced party games, real-time physics, and local multiplayer rematches.**
+> **A mobile-first browser arcade suite packed with authentic GamePigeon-style party games, real-time physics, and local multiplayer rematches.**
 
 [![Live Demo](https://img.shields.io/badge/demo-online-brightgreen.svg)](https://ilikeapplesandbananas.github.io/thutos-arcade/)
-[![JavaScript](https://img.shields.io/badge/JavaScript-ES_Modules-f7df1e.svg)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![Three.js](https://img.shields.io/badge/3D_Engine-Three.js-black.svg)](https://threejs.org/)
-[![Matter.js](https://img.shields.io/badge/2D_Physics-Matter.js-4b8bbe.svg)](https://brm.io/matter-js/)
-[![Cannon-es](https://img.shields.io/badge/3D_Physics-Cannon--es-ff69b4.svg)](https://pmndrs.github.io/cannon-es/)
+[![JavaScript](https://img.shields.io/badge/JavaScript-Vanilla_ES6-f7df1e.svg)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![CSS](https://img.shields.io/badge/Design-Glassmorphic_Dark-8b5cf6.svg)](css/styles.css)
+[![Zero Dependencies](https://img.shields.io/badge/Dependencies-Zero_CDN-3ee0b0.svg)](index.html)
 
 ---
 
 ## 🌟 Overview
 
-**Thuto's Arcade** is an all-in-one web game platform inspired by turn-based party game classics (such as GamePigeon). Crafted as a high-performance single-page application, it delivers instant, responsive gameplay across both desktop and mobile devices without requiring any installation or app store downloads.
+**Thuto's Arcade** is an authentic browser recreation of the iconic turn-based party game classics from iMessage (GamePigeon). Built from the ground up with high-performance Canvas 2D graphics, fixed-timestep physics, synthesized Web Audio, and zero external blocking dependencies, every game launches instantly and plays without freezing or frame drops.
 
-Whether you are challenging a smart CPU with selectable difficulty levels or passing the device to a friend for an intense 2-player duel, every game is built with fine-tuned controls, dynamic canvas animations, and interactive feedback.
+Challenge a smart CPU across three difficulty tiers (**Easy**, **Medium**, **Hard**) or pass your device to a friend for head-to-head **Pass & Play** rematches.
 
 ---
 
-## 🎮 The Game Roster
+## 🎮 The Game Roster & Authentic Mechanics
 
-The arcade features **10 distinct mini-games** spanning pool, sports, physics battles, and word puzzles:
+The arcade features **10 complete party games** faithfully simulating the controls, physics, and rules of GamePigeon:
 
-| Game | Category | Engine / Tech | Gameplay Description |
+| Game | Category | Engine & Simulation | Authentic GamePigeon Rules & Mechanics |
 | :--- | :--- | :--- | :--- |
-| 🎱 **8 Ball / 9 Ball** | Pool | 2D Canvas & Physics | Realistic cue-ball billiards. Call solids or stripes, control shot power and angles, and pocket balls to close the table. |
-| 🏀 **Basketball** | Sports | Real-time Physics | Swipe to arc your shots cleanly through the rim or bank them off the backboard. |
-| 🍺 **Cup Pong** | Sports | 3D / Cannon-es | Precision trajectory aiming to bounce table tennis balls directly into cup formations. |
-| ⛳ **Mini Golf** | Sports | Canvas Vector Physics | Read tricky sloped greens, calculate banking angles, and sink your putts under par. |
-| 🏹 **Archery** | Sports | Wind & Sway Physics | Compensate for dynamic crosswinds and sight sway to hit dead-center bullseyes. |
-| 🎯 **Darts** | Sports | Precision Trajectory | Play classic 301 rules. Land high-value triples and finish the game on a double ring. |
-| 🐧 **Knockout** | Sports / Battle | Matter.js Physics | Slingshot your penguin squad across an icy arena to knock your opponent’s pieces off the board. |
-| 🔍 **Word Hunt** | Word Games | Grid Graph Traversal | Trace contiguous letter paths across a 4×4 grid to discover valid words before time expires. |
-| 🔠 **Anagrams** | Word Games | SCOWL Lexicon | Unscramble letters from a 6-letter bank to unlock as many dictionary words as possible. |
-| 🧩 **Word Bites** | Word Games | Block Physics & Lexicon | Slide and arrange segmented letter tiles horizontally and vertically to form crossword combinations. |
+| 🎱 **8 Ball / 9 Ball** | Pool | Sub-stepped 2D Physics | Ghost-ball aiming line showing projected path into pockets; left vertical power slider; scratch ball-in-hand placement; solid vs stripe group claims; legal contact rules. |
+| 🏀 **Basketball** | Sports | Parabolic Arc + Depth | 30-second countdown clock; swipe/flick to shoot; rim and backboard banking physics; net swish animation; **ON FIRE** streak (2X points after 3 in a row); moving hoop after 10 points! |
+| 🍺 **Cup Pong** | Sports | Trajectory Simulation | 10 red Solo cups arranged in a triangle on a long wooden beer pong table; 2 shots per turn; direct swishes or table bounce ricochets; water splash FX; re-rack options at 6, 4, 3, or 2 cups. |
+| ⛳ **Mini Golf** | Sports | Vector Physics | 3-hole course with bank walls, bouncy orange bumpers, sand traps (heavy deceleration), and water hazards (+1 penalty stroke & reset); drag-back aim guideline; par scoring. |
+| 🏹 **Archery** | Sports | Wind Deflection Physics | 3 distance rounds (50ft, 70ft, 90ft) with distance multipliers; dynamic wind meter (direction & magnitude); touch-to-draw bowstring with sight sway; 10-ring scoring. |
+| 🎯 **Darts (301)** | Sports | Pub Dartboard Sectors | Classic 301 rules; touch-and-hold aiming crosshair; swipe throw; 3 darts per turn; Singles, Doubles (2x), Triples (3x), Outer Bull (25), Inner Bull (50); **Bust rule** on dropping below 0. |
+| 🐧 **Knockout** | Sports / Battle | Ice Friction Collisions | 4 penguins per team on a circular iceberg; slingshot drag-back aiming with power arrow; low-friction ice sliding; elastic circle collisions; **shrinking ice** each round; water knockoffs. |
+| 🔍 **Word Hunt** | Word Games | 4×4 Boggle Graph Traversal | 80-second countdown timer; touch-and-drag contiguous path across adjacent letter tiles; exponential length scoring (3: 100, 4: 400, 5: 800, 6: 1400, 7: 1800, 8+: 2200+); ENABLE dictionary validation. |
+| 🔠 **Anagrams** | Word Games | 6-Letter Lexicon Solver | 60-second countdown timer; 6 scrambled letter tiles in a bottom tray; grouped word slots (3, 4, 5, 6 letters); keyboard typing support; shuffle button; 2,000 pts for the 6-letter anagram! |
+| 🧩 **Word Bites** | Word Games | 8×9 Crossword Grid | 80-second countdown timer; 8×9 crossword grid; tray with singles and fixed 2-letter blocks (horizontal and vertical); words formed across and down; prefix/suffix extensions. |
 
 ---
 
-## ✨ Key Features
+## ✨ Design & Architecture Highlights
 
-- **🤖 Smart AI & Local 2-Player**:
-  - Play solo against an AI CPU across three difficulty tiers (**Normal**, **Medium**, **Hard**).
-  - Switch to **Local 2-Player (Pass & Play)** mode for live head-to-head showdowns.
-- **⚡ Physics & 3D Integration**:
-  - 2D rigid-body simulation via [Matter.js](https://brm.io/matter-js/).
-  - 3D rendering and volumetric collision detection via [Three.js](https://threejs.org/) & [Cannon-es](https://pmndrs.github.io/cannon-es/).
-- **📚 Authentic Word Validation**:
-  - Full dictionary checking powered by the Kevin Atkinson **SCOWL** wordlist.
-- **🔊 Web Audio FX**:
-  - Built-in synthesized sound effects for ball collisions, countdown timers, swishes, and victory chimes (toggleable with one click).
-- **📱 Responsive & Touch-Optimized**:
-  - Fluid mobile drag, pull-back aiming, and gesture controls tailored for touchscreens and mouse input alike.
+- **⚡ Freeze-Free Architecture**:
+  - Independent capped fixed-timestep game engine with managed timers and complete resource teardown on screen switch.
+  - No blocking CDN modules (`three.js`, `cannon.js`, `matter.js` removed in favor of lightweight, deterministic canvas physics).
 - **🎨 Glassmorphic Cyberpunk UI**:
-  - Sleek modern arcade aesthetics with glowing neon accents, avatar selection, live player statistics, and responsive modal viewports.
+  - Deep indigo color palette (`#0d0b22`) with neon accents (`#ffd166`, `#ff5d8f`, `#3ee0b0`, `#4cc9f0`).
+  - Animated hero floating cards, category filters, and responsive mobile layout.
+  - Live Scoreboard Header with active player turn glow, scores, sub-stats, rules help modal, and audio mute toggle.
+  - Turn handoff privacy screen ("Pass to Player 2 — Don't peek!").
+- **🔊 Web Audio SFX**:
+  - Synthesized sound effects without external audio files (ball clacks, cue hits, rim bounces, swishes, splashes, arrow thunks, and victory chimes).
+- **📚 Integrated English Lexicon**:
+  - Embedded 125,000+ word ENABLE dictionary with prefix indexing for instant word lookup without API latency.
 
 ---
 
-## 🚀 Quick Start / How to Run
+## 🚀 How to Run Locally
 
-### Method 1: Direct Browser Launch
-Simply double-click [`index.html`](index.html) or open it directly in Google Chrome, Brave, Firefox, Edge, or Safari:
-```bash
-# On Windows PowerShell:
+### Direct Browser Launch
+Open [`index.html`](index.html) directly in any modern browser:
+```powershell
 Start-Process index.html
 ```
 
-### Method 2: Local HTTP Server (Recommended)
-Running a local web server ensures seamless loading of CDN ES modules and cross-origin assets:
-
+### Local Web Server
 ```bash
+# Using Node:
+npx serve .
+
 # Using Python:
 python -m http.server 8080
-
-# Using Node / npx:
-npx serve .
 ```
-Then visit **`http://localhost:8080`** in your browser.
+Then navigate to **`http://localhost:8080`**.
 
 ---
 
-## 🌐 Deploy to GitHub Pages
+## 🌐 GitHub Pages Deployment
 
-You can host **Thuto's Arcade** for free on GitHub Pages:
-1. Go to your repository on GitHub: `https://github.com/ilikeapplesandbananas/thutos-arcade`
-2. Navigate to **Settings** > **Pages**.
-3. Under **Build and deployment** > **Source**, select `Deploy from a branch`.
-4. Choose the `main` branch and `/ (root)` folder, then click **Save**.
-5. Your arcade will be live at `https://ilikeapplesandbananas.github.io/thutos-arcade/`!
+The repository is hosted live on GitHub Pages:
+**[https://ilikeapplesandbananas.github.io/thutos-arcade/](https://ilikeapplesandbananas.github.io/thutos-arcade/)**
 
 ---
 
-## 🛠️ Tech Stack
-
-- **Frontend**: HTML5, Modern Vanilla CSS, ES Modules JavaScript
-- **3D Graphics**: [Three.js](https://threejs.org/)
-- **3D Physics**: [Cannon-es](https://github.com/pmndrs/cannon-es)
-- **2D Physics**: [Matter.js](https://brm.io/matter-js/)
-- **Audio**: Web Audio API (Synthesized SFX)
-- **Word Data**: SCOWL (Spell Checking Oriented Word Lists)
-
----
-
-## 📜 Credits & Acknowledgements
+## 📜 Credits & License
 
 - **Author**: Thuto ([@ilikeapplesandbananas](https://github.com/ilikeapplesandbananas))
-- **Wordlist**: Kevin Atkinson’s [SCOWL](https://github.com/BartMassey/wordlists/blob/main/README-scowl-60.txt) (2000–2019)
-- Physics and rendering engines courtesy of the open-source Three.js, Cannon-es, and Matter.js communities.
-
----
+- **Word Data**: ENABLE (Public Domain) & Google 10,000 English (MIT)
+- **License**: MIT
 
 <p align="center">Made with ❤️ by Thuto • Ready for the rematch!</p>
