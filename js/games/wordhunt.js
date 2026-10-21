@@ -90,11 +90,7 @@
       const r = Math.floor(by / step);
 
       if (c >= 0 && c < this.gridSize && r >= 0 && r < this.gridSize) {
-        const offX = bx - c * step;
-        const offY = by - r * step;
-        if (offX <= this.tileSize && offY <= this.tileSize) {
-          return { r, c, idx: r * this.gridSize + c };
-        }
+        return { r, c, idx: r * this.gridSize + c };
       }
       return null;
     }

@@ -13,6 +13,7 @@
       this.names = opts.names;          // [p0, p1]
       this.ui = opts.ui;
       this.W = 420; this.H = 760;       // logical world (portrait, like a phone)
+      this.scale = 1; this.ox = 0; this.oy = 0; this.dpr = 1; this.cw = 420; this.ch = 760;
       this.turn = 0;
       this.timeScale = 1;
       this.time = 0;
@@ -36,6 +37,13 @@
       c.addEventListener('pointermove', this._onMove);
       c.addEventListener('pointerup', this._onUp);
       c.addEventListener('pointercancel', this._onUp);
+      this._onWinUp = e => {
+        if (this._pid != null && e.pointerId === this._pid) {
+          this._pointer(e, 'up');
+        }
+      };
+      window.addEventListener('pointerup', this._onWinUp);
+      window.addEventListener('pointercancel', this._onWinUp);
       c.addEventListener('contextmenu', e => e.preventDefault());
       window.addEventListener('keydown', this._onKey);
       this._ro = new ResizeObserver(() => this.resize());
@@ -56,6 +64,8 @@
       this._timers.clear();
       if (this._ro) this._ro.disconnect();
       window.removeEventListener('keydown', this._onKey);
+      window.removeEventListener('pointerup', this._onWinUp);
+      window.removeEventListener('pointercancel', this._onWinUp);
       if (this.canvas) this.canvas.remove();
       if (this.cleanup) this.cleanup();
     }

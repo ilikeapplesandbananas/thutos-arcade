@@ -168,10 +168,21 @@
         return;
       }
 
-      // Left power slider hit (x: 10 to 45)
-      if (p.x < 48) {
+      // Left power slider hit (x: 10 to 55)
+      if (p.x < 55) {
         this.draggingPower = true;
         this.updatePower(p.y);
+        return;
+      }
+
+      // Cue stick pull-back touch (near cue stick or pulling back from cue ball)
+      const oppAngle = this.aimAngle + Math.PI;
+      const dX = p.x - this.cueBall.x;
+      const dY = p.y - this.cueBall.y;
+      const projAlongCue = Math.cos(oppAngle) * dX + Math.sin(oppAngle) * dY;
+      const distFromCueBall = Math.hypot(dX, dY);
+      if (distFromCueBall < 65 || (projAlongCue > 10 && projAlongCue < 220 && Math.abs(-Math.sin(oppAngle) * dX + Math.cos(oppAngle) * dY) < 45)) {
+        this.draggingCueStick = true;
         return;
       }
 
@@ -184,16 +195,23 @@
       if (this.moving || this.over || this.cpuTurn) return;
       if (this.draggingPower) {
         this.updatePower(p.y);
+      } else if (this.draggingCueStick) {
+        const oppAngle = this.aimAngle + Math.PI;
+        const dX = p.x - this.cueBall.x;
+        const dY = p.y - this.cueBall.y;
+        const pullDist = Math.max(0, Math.cos(oppAngle) * dX + Math.sin(oppAngle) * dY);
+        this.power = U.clamp(pullDist / 120, 0, 1);
       } else if (this.draggingAim) {
         this.updateAim(p);
       }
     }
 
     onUp() {
-      if (this.draggingPower && this.power > 0.05) {
+      if ((this.draggingPower || this.draggingCueStick) && this.power > 0.05) {
         this.shoot(this.power);
       }
       this.draggingPower = false;
+      this.draggingCueStick = false;
       this.draggingAim = false;
       this.power = 0;
     }

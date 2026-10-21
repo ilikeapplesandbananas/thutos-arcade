@@ -90,7 +90,7 @@
     /* ---------- Input ---------- */
     onDown(p) {
       if (!this.activeRound || this.cpuTurn || !this.ball || this.ball.inAir) return;
-      if (U.dist(p.x, p.y, this.ball.x, this.ball.y) < this.ballRadius * 2.2) {
+      if (U.dist(p.x, p.y, this.ball.x, this.ball.y) < this.ballRadius * 3.5 || p.y > this.H * 0.65) {
         this.swipeStart = { x: p.x, y: p.y, t: performance.now() };
       }
     }
@@ -110,7 +110,7 @@
       this.swipeStart = null;
 
       // Only shoot if swiped upward
-      if (dy < -35 && dt < 0.6) {
+      if (dy < -25 && dt < 0.75) {
         this.shootBall(dx, dy, dt);
       } else {
         // Return ball to spawn

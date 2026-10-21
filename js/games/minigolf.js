@@ -114,7 +114,7 @@
     /* ---------- Input ---------- */
     onDown(p) {
       if (this.moving || this.over || this.cpuTurn || this.ball.inHole) return;
-      if (U.dist(p.x, p.y, this.ball.x, this.ball.y) < 55) {
+      if (U.dist(p.x, p.y, this.ball.x, this.ball.y) < 80) {
         this.pullAim = { x: p.x, y: p.y };
       }
     }

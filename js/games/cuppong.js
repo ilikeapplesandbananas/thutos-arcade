@@ -137,7 +137,7 @@
         }
       }
 
-      if (U.dist(p.x, p.y, this.ball.x, this.ball.y) < 70) {
+      if (U.dist(p.x, p.y, this.ball.x, this.ball.y) < 80 || p.y > this.H * 0.7) {
         this.swipeStart = { x: p.x, y: p.y, t: performance.now() };
       }
     }

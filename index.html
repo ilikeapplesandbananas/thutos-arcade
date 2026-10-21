@@ -32,7 +32,7 @@
     <main class="lobby-main">
       <section class="hero">
         <div class="hero-copy">
-          <span class="eyebrow">11 games · CPU or pass &amp; play</span>
+          <span class="eyebrow">10 games · CPU or pass &amp; play</span>
           <h1>Ready for a<br><span class="grad-text">rematch?</span></h1>
           <p>The party games you love from iMessage, right in your browser. Break the rack, sink a three, or find the longest word before the clock runs out.</p>
           <div class="hero-cta">
@@ -71,55 +71,54 @@
       </div>
     </header>
     <div class="stage" id="stage"></div>
-
-    <!-- Overlays -->
-    <div class="overlay" id="setup">
-      <div class="sheet">
-        <div class="sheet-head"><div class="sheet-icon" id="setupIcon"></div><div><h3 id="setupTitle">Game</h3><p id="setupTag"></p></div></div>
-        <div class="field" id="variantField"><label>Mode</label><div class="seg" id="variantSeg"></div></div>
-        <div class="field"><label>Opponent</label><div class="seg" id="modeSeg"><button data-v="cpu" class="on">vs CPU</button><button data-v="local">Pass &amp; Play</button></div></div>
-        <div class="field" id="levelField"><label>CPU difficulty</label><div class="seg" id="levelSeg"><button data-v="easy">Easy</button><button data-v="medium" class="on">Medium</button><button data-v="hard">Hard</button></div></div>
-        <div class="field" id="p2Field"><label>Player 2 name</label><input id="p2Name" maxlength="12" value="Player 2" autocomplete="off"></div>
-        <details class="howto"><summary>How to play</summary><ul id="setupRules"></ul></details>
-        <div class="sheet-actions"><button class="btn btn-ghost" id="setupCancel">Back</button><button class="btn btn-primary" id="setupStart">Start game</button></div>
-      </div>
-    </div>
-
-    <div class="overlay" id="handoff">
-      <div class="sheet center">
-        <div class="handoff-avatar" id="handoffAvatar">P</div>
-        <h3 id="handoffTitle">Pass to Player 2</h3>
-        <p id="handoffText">Don't peek! Tap when you're ready.</p>
-        <button class="btn btn-primary" id="handoffGo">I'm ready</button>
-      </div>
-    </div>
-
-    <div class="overlay" id="results">
-      <div class="sheet center">
-        <div class="trophy" id="trophy"></div>
-        <h3 id="resultTitle">You win!</h3>
-        <p id="resultText"></p>
-        <div class="result-scores" id="resultScores"></div>
-        <div class="sheet-actions"><button class="btn btn-ghost" id="resLobby">Lobby</button><button class="btn btn-ghost" id="resSettings">Settings</button><button class="btn btn-primary" id="resRematch">Rematch</button></div>
-      </div>
-    </div>
-
-    <div class="overlay" id="help">
-      <div class="sheet">
-        <div class="sheet-head"><div class="sheet-icon" id="helpIcon"></div><div><h3 id="helpTitle">How to play</h3><p>Rules &amp; controls</p></div></div>
-        <ul class="rules" id="helpRules"></ul>
-        <div class="sheet-actions"><button class="btn btn-ghost" id="helpRestart">Restart game</button><button class="btn btn-primary" id="helpClose">Got it</button></div>
-      </div>
-    </div>
-
     <div class="loading" id="loading"><div class="spinner"></div><span id="loadingText">Loading…</span></div>
+  </div>
+
+  <!-- ============ TOP-LEVEL MODAL OVERLAYS (Accessible from lobby & game) ============ -->
+  <div class="overlay" id="setup">
+    <div class="sheet">
+      <div class="sheet-head"><div class="sheet-icon" id="setupIcon"></div><div><h3 id="setupTitle">Game</h3><p id="setupTag"></p></div></div>
+      <div class="field" id="variantField"><label>Mode</label><div class="seg" id="variantSeg"></div></div>
+      <div class="field"><label>Opponent</label><div class="seg" id="modeSeg"><button data-v="cpu" class="on">vs CPU</button><button data-v="local">Pass &amp; Play</button></div></div>
+      <div class="field" id="levelField"><label>CPU difficulty</label><div class="seg" id="levelSeg"><button data-v="easy">Easy</button><button data-v="medium" class="on">Medium</button><button data-v="hard">Hard</button></div></div>
+      <div class="field" id="p2Field" style="display:none"><label>Player 2 name</label><input id="p2Name" maxlength="12" value="Player 2" autocomplete="off"></div>
+      <details class="howto" open><summary>How to play</summary><ul id="setupRules"></ul></details>
+      <div class="sheet-actions"><button class="btn btn-ghost" id="setupCancel">Cancel</button><button class="btn btn-primary" id="setupStart">Start game</button></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="handoff">
+    <div class="sheet center">
+      <div class="handoff-avatar" id="handoffAvatar">P</div>
+      <h3 id="handoffTitle">Pass to Player 2</h3>
+      <p id="handoffText">Don't peek! Tap when you're ready.</p>
+      <button class="btn btn-primary" id="handoffGo">I'm ready</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="results">
+    <div class="sheet center">
+      <div class="trophy" id="trophy"></div>
+      <h3 id="resultTitle">You win!</h3>
+      <p id="resultText"></p>
+      <div class="result-scores" id="resultScores"></div>
+      <div class="sheet-actions"><button class="btn btn-ghost" id="resLobby">Lobby</button><button class="btn btn-ghost" id="resSettings">Settings</button><button class="btn btn-primary" id="resRematch">Rematch</button></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="help">
+    <div class="sheet">
+      <div class="sheet-head"><div class="sheet-icon" id="helpIcon"></div><div><h3 id="helpTitle">How to play</h3><p>Rules &amp; controls</p></div></div>
+      <ul class="rules" id="helpRules"></ul>
+      <div class="sheet-actions"><button class="btn btn-ghost" id="helpRestart">Restart game</button><button class="btn btn-primary" id="helpClose">Got it</button></div>
+    </div>
   </div>
 
   <div class="overlay" id="nameDlg">
     <div class="sheet center">
       <h3>What should we call you?</h3>
       <input id="nameInput" maxlength="12" autocomplete="off">
-      <div class="sheet-actions"><button class="btn btn-primary" id="nameSave">Save</button></div>
+      <div class="sheet-actions"><button class="btn btn-ghost" id="nameCancel">Cancel</button><button class="btn btn-primary" id="nameSave">Save</button></div>
     </div>
   </div>
 
@@ -127,6 +126,7 @@
   <script src="js/core/audio.js"></script>
   <script src="js/core/engine.js"></script>
   <script src="js/core/words.js"></script>
+  <script src="data/words.js"></script>
   <script src="js/core/icons.js"></script>
   <script src="js/games/pool.js"></script>
   <script src="js/games/basketball.js"></script>
