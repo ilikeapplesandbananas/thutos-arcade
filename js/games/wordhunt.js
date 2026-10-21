@@ -39,7 +39,9 @@
       this.floatingWords = [];
 
       Words.load().then(() => {
-        this.startRound(0);
+        this.completedRounds = 0;
+        const first = (this.opts && this.opts.firstTurn != null) ? this.opts.firstTurn : 0;
+        this.startRound(first);
       });
     }
 
@@ -62,6 +64,11 @@
       this.activeRound = true;
       this.path = [];
       this.swiping = false;
+
+      // Fresh randomized board every round
+      if (playerIdx > 0) {
+        this.boardLetters = this.generateBoard();
+      }
 
       this.banner(playerIdx === 0 ? 'START!' : `${this.playerName(playerIdx)}'S TURN!`, { color: '#ffd166', dur: 1.2 });
       Sound.good();
@@ -184,12 +191,12 @@
 
       // Find all possible words on this 4x4 grid via DFS
       const allWords = this.solveGrid();
-      const skillCount = this.cpuSkill(12, 24, 40);
+      const skillCount = this.cpuSkill(10, 22, 38);
 
       // Difficulty sorting: Hard prioritizes long high-scoring words; Easy stays with 3-4 letter words
       const sorted = allWords.slice().sort((a, b) => {
-        if (this.diff === 'hard') return b.length - a.length || (Math.random() - 0.5);
-        if (this.diff === 'easy') return a.length - b.length || (Math.random() - 0.5);
+        if (this.level === 'hard') return b.length - a.length || (Math.random() - 0.5);
+        if (this.level === 'easy') return a.length - b.length || (Math.random() - 0.5);
         return Math.random() - 0.5;
       });
       const selectedWords = sorted.slice(0, skillCount);
@@ -202,16 +209,67 @@
         this.scores[1] += pts;
         this.foundWords[1].add(w);
 
+        // Visually animate CPU tracing the word on the 4x4 board
+        const path = this.findPathForWord(w);
+        if (path) {
+          this.path = path;
+          this.wait(400, () => { if (this.cpuTurn) this.path = []; });
+        }
+
         Sound.letter(Math.min(6, w.length));
         this.banner(`+${pts} (${w.toUpperCase()})`, { color: '#ff5d6c', dur: 0.8, size: 26 });
         this.floatingWords.push({ text: w.toUpperCase(), pts, t: 0, dur: 1.0 });
         this.updateHUD();
 
-        const delay = this.cpuSkill(U.rand(2600, 3800), U.rand(1700, 2500), U.rand(1100, 1700));
+        const delay = this.cpuSkill(U.rand(2800, 4000), U.rand(1800, 2600), U.rand(1100, 1800));
         this.wait(delay, submitNext);
       };
 
       this.wait(1500, submitNext);
+    }
+
+    findPathForWord(word) {
+      const visited = new Array(16).fill(false);
+      const target = word.toLowerCase();
+
+      const dfs = (r, c, charIdx, currentPath) => {
+        const idx = r * 4 + c;
+        if (this.boardLetters[idx].toLowerCase() !== target[charIdx]) return null;
+
+        visited[idx] = true;
+        currentPath.push({ r, c, idx });
+
+        if (charIdx === target.length - 1) {
+          visited[idx] = false;
+          return currentPath;
+        }
+
+        for (let dr = -1; dr <= 1; dr++) {
+          for (let dc = -1; dc <= 1; dc++) {
+            if (dr === 0 && dc === 0) continue;
+            const nr = r + dr, nc = c + dc;
+            if (nr >= 0 && nr < 4 && nc >= 0 && nc < 4 && !visited[nr * 4 + nc]) {
+              const res = dfs(nr, nc, charIdx + 1, currentPath);
+              if (res) {
+                visited[idx] = false;
+                return res;
+              }
+            }
+          }
+        }
+
+        visited[idx] = false;
+        currentPath.pop();
+        return null;
+      };
+
+      for (let r = 0; r < 4; r++) {
+        for (let c = 0; c < 4; c++) {
+          const res = dfs(r, c, 0, []);
+          if (res) return res;
+        }
+      }
+      return null;
     }
 
     solveGrid() {
@@ -277,12 +335,14 @@
       this.banner("TIME'S UP!", { color: '#ff5d6c', dur: 1.5 });
 
       this.wait(1600, () => {
-        if (this.round === 0) {
+        this.completedRounds = (this.completedRounds || 0) + 1;
+        if (this.completedRounds === 1) {
+          const nextPlayer = 1 - this.round;
           if (this.mode === 'local') {
-            this.handoff(1, `Pass to ${this.playerName(1)}`, `Same board! ${this.playerName(0)} scored ${this.scores[0]} pts. Beat it!`)
-              .then(() => this.startRound(1));
+            this.handoff(nextPlayer, `Pass to ${this.playerName(nextPlayer)}`, `${this.playerName(this.round)} scored ${this.scores[this.round]} pts. Beat it!`)
+              .then(() => this.startRound(nextPlayer));
           } else {
-            this.startRound(1);
+            this.startRound(nextPlayer);
           }
         } else {
           // Resolve match

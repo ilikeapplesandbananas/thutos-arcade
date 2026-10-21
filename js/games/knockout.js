@@ -8,7 +8,7 @@
       this.H = 760;
 
       this.round = 1;
-      this.turn = 0;
+      this.turn = (this.opts && this.opts.firstTurn != null) ? this.opts.firstTurn : 0;
       this.r = 18; // penguin radius
 
       // Iceberg platform (circular ice floe)
@@ -23,6 +23,9 @@
 
       this.spawnPenguins();
       this.updateHUD();
+      if (this.cpuTurn) {
+        this.wait(800, () => this.cpuLaunch());
+      }
     }
 
     spawnPenguins() {

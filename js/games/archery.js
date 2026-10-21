@@ -16,7 +16,7 @@
       this.currentRound = 0;
       this.arrowsLeft = 3;
       this.scores = [0, 0];
-      this.turn = 0;
+      this.turn = (this.opts && this.opts.firstTurn != null) ? this.opts.firstTurn : 0;
 
       // Target position
       this.target = { x: this.W / 2, y: 270, r: 130 };
@@ -43,12 +43,33 @@
 
       this.rollWind();
       this.updateHUD();
+      if (this.cpuTurn) {
+        this.wait(800, () => this.cpuShoot());
+      }
     }
 
     rollWind() {
-      // Wind speed between -4 and +4 (0 is calm)
-      const speeds = [-4, -3, -2, -1, 0, 1, 2, 3, 4];
+      // Shifting wind on every shot: non-zero crosswinds (-4 to +4)
+      const speeds = [-4, -3, -2, -1, 1, 2, 3, 4];
       this.wind = U.pick(speeds);
+      this.rollClothes();
+    }
+
+    rollClothes() {
+      const wardrobe = [
+        { w: 26, h: 36, col: '#3d8bff', name: 'towel' },
+        { w: 30, h: 42, col: '#ffd166', name: 'shirt' },
+        { w: 24, h: 32, col: '#ff5d6c', name: 'cloth' },
+        { w: 28, h: 34, col: '#a855f7', name: 'jersey' },
+        { w: 22, h: 38, col: '#2ec4b6', name: 'shorts' },
+        { w: 18, h: 26, col: '#ff9f43', name: 'socks' },
+        { w: 32, h: 44, col: '#ffffff', name: 'tee' }
+      ];
+      this.clothes = [
+        Object.assign({ x: 135, y: 467 }, U.pick(wardrobe)),
+        Object.assign({ x: 210, y: 472 }, U.pick(wardrobe)),
+        Object.assign({ x: 285, y: 467 }, U.pick(wardrobe))
+      ];
     }
 
     /* ---------- Input ---------- */
@@ -133,13 +154,6 @@
           if (l.x < -20) l.x = this.W + 20;
           if (l.y > this.H) l.y = 100;
         }
-      }
-
-      // Natural sight sway while aiming
-      if (this.drawing) {
-        this.drawSway += dt * 3.5;
-        this.crosshair.x += Math.sin(this.drawSway) * 0.7;
-        this.crosshair.y += Math.cos(this.drawSway * 1.3) * 0.7;
       }
 
       // Arrow in flight
@@ -348,8 +362,8 @@
       c.quadraticCurveTo(this.W / 2, topY + 14, p2x, topY);
       c.stroke();
 
-      // Flapping laundry items
-      const items = [
+      // Flapping laundry items (dynamic wardrobe changes every shot)
+      const items = this.clothes || [
         { x: 135, y: topY + 7, w: 26, h: 36, col: '#3d8bff', name: 'towel' },
         { x: 210, y: topY + 12, w: 30, h: 40, col: '#ffd166', name: 'shirt' },
         { x: 285, y: topY + 7, w: 24, h: 32, col: '#ff5d6c', name: 'cloth' }

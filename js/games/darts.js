@@ -12,7 +12,7 @@
 
       this.scores = [301, 301];
       this.turnStartScore = 301;
-      this.turn = 0;
+      this.turn = (this.opts && this.opts.firstTurn != null) ? this.opts.firstTurn : 0;
       this.dartsLeft = 3;
       this.dartsInBoard = [];
 
@@ -26,6 +26,9 @@
       this.inFlight = null;
 
       this.updateHUD();
+      if (this.cpuTurn) {
+        this.wait(700, () => this.cpuThrow());
+      }
     }
 
     /* ---------- Input ---------- */

@@ -102,7 +102,10 @@
     /* all dictionary words that can be built from a multiset of letters */
     wordsFromLetters(letters, minLen = 3) {
       const cnt = {};
-      for (const ch of letters) cnt[ch] = (cnt[ch] || 0) + 1;
+      for (const ch of letters) {
+        const c = String(ch).toLowerCase();
+        cnt[c] = (cnt[c] || 0) + 1;
+      }
       const out = [];
       for (const w of this.list) {
         if (w.length < minLen || w.length > letters.length) continue;

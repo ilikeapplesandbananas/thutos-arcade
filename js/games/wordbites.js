@@ -32,7 +32,9 @@
       this.dragOffset = { x: 0, y: 0 };
 
       Words.load().then(() => {
-        this.startRound(0);
+        this.completedRounds = 0;
+        const first = (this.opts && this.opts.firstTurn != null) ? this.opts.firstTurn : 0;
+        this.startRound(first);
       });
     }
 
@@ -105,6 +107,11 @@
       this.round = playerIdx;
       this.timeLeft = 80.0;
       this.activeRound = true;
+
+      // Fresh randomized blocks each round
+      if (playerIdx > 0) {
+        this.blocks = this.generateBlocks();
+      }
 
       // Reset grid
       this.grid = Array.from({ length: this.rows }, () => new Array(this.cols).fill(null));
@@ -360,7 +367,7 @@
 
       const filtered = allFormations.filter(f => f.word.length >= minWordLen && f.word.length <= maxWordLen);
       const sorted = U.shuffle(filtered).sort((a, b) => {
-        return this.diff === 'hard' ? b.word.length - a.word.length : a.word.length - b.word.length;
+        return this.level === 'hard' ? b.word.length - a.word.length : a.word.length - b.word.length;
       });
 
       let placedCount = 0;
@@ -452,12 +459,14 @@
       this.banner("TIME'S UP!", { color: '#ff5d6c', dur: 1.5 });
 
       this.wait(1600, () => {
-        if (this.round === 0) {
+        this.completedRounds = (this.completedRounds || 0) + 1;
+        if (this.completedRounds === 1) {
+          const nextPlayer = 1 - this.round;
           if (this.mode === 'local') {
-            this.handoff(1, `Pass to ${this.playerName(1)}`, `Same block tray! ${this.playerName(0)} scored ${this.scores[0]} pts. Beat it!`)
-              .then(() => this.startRound(1));
+            this.handoff(nextPlayer, `Pass to ${this.playerName(nextPlayer)}`, `${this.playerName(this.round)} scored ${this.scores[this.round]} pts. Beat it!`)
+              .then(() => this.startRound(nextPlayer));
           } else {
-            this.startRound(1);
+            this.startRound(nextPlayer);
           }
         } else {
           // Resolve match

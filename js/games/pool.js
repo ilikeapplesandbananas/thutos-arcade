@@ -12,7 +12,7 @@
 
   class PoolGame extends A.Game {
     init() {
-      this.variant = this.variant || '8ball'; // '8ball' | '9ball'
+      this.variant = (this.opts && (this.opts.variant || this.opts.gameId)) || this.variant || '8ball';
       this.W = 420;
       this.H = 760;
 
@@ -49,7 +49,7 @@
       this.sunk = [[], []];
       this.groups = [null, null]; // 'solids' | 'stripes'
       this.score = [0, 0];
-      this.turn = 0;
+      this.turn = (this.opts && this.opts.firstTurn != null) ? this.opts.firstTurn : 0;
       this.aimAngle = -Math.PI / 2; // aiming upward initially
       this.power = 0;
       this.aiming = true;
@@ -67,8 +67,11 @@
         p1sub: this.variant === '8ball' ? 'Open table' : 'Hit lowest ball',
         score0: 0,
         score1: 0,
-        status: `${this.playerName(0)}: Drag to aim, pull cue to shoot`
+        status: `${this.playerName(this.turn)}: Drag to aim, pull cue to shoot`
       });
+      if (this.cpuTurn) {
+        this.wait(800, () => this.cpuShoot());
+      }
     }
 
     rackBalls() {
@@ -280,16 +283,16 @@
           let nearPocket = false;
           for (const p of this.pockets) {
             const dist = U.dist(b.x, b.y, p.x, p.y);
-            if (dist < p.r * 1.15) {
+            if (dist < p.r * 1.30) {
               if (!b.sinking && !b.sunk) {
                 this.pocketBall(b, p);
               }
               nearPocket = true;
               break;
-            } else if (dist < p.r * 1.75) {
+            } else if (dist < p.r * 2.3) {
               nearPocket = true;
               // Pocket mouth suction funnels the ball smoothly into the cup
-              const pull = (p.r * 1.75 - dist) * 14 * sdt;
+              const pull = (p.r * 2.3 - dist) * 26 * sdt;
               b.vx += ((p.x - b.x) / dist) * pull;
               b.vy += ((p.y - b.y) / dist) * pull;
             }
@@ -350,14 +353,17 @@
         }
       }
 
-      // Sinking ball animations into pockets
+      // Sinking ball animations into pockets with 3D swirl
       for (const b of this.balls) {
         if (b.sinking) {
           b.sinking.t += dt;
           const k = Math.min(1, b.sinking.t / b.sinking.dur);
-          b.x = U.lerp(b.sinking.startX, b.sinking.px, k);
-          b.y = U.lerp(b.sinking.startY, b.sinking.py, k);
-          b.scale = 1 - k * 0.65;
+          const p = b.sinking;
+          const ang = (p.startAngle || 0) + k * Math.PI * 3.5;
+          const swirlRad = (1 - k) * 7;
+          b.x = U.lerp(p.startX, p.px, k) + Math.cos(ang) * swirlRad;
+          b.y = U.lerp(p.startY, p.py, k) + Math.sin(ang) * swirlRad;
+          b.scale = 1 - k * 0.70;
           b.alpha = 1 - k * 0.85;
           if (k >= 1) {
             b.sunk = true;
@@ -383,11 +389,12 @@
         py: p.y,
         startX: b.x,
         startY: b.y,
+        startAngle: Math.atan2(b.y - p.y, b.x - p.x),
         t: 0,
-        dur: 0.35
+        dur: 0.40
       };
-      b.vx = (p.x - b.x) * 3;
-      b.vy = (p.y - b.y) * 3;
+      b.vx = (p.x - b.x) * 2;
+      b.vy = (p.y - b.y) * 2;
       Sound.pocket();
       this.fx.burst(p.x, p.y, 14, { color: '#ffd166', speed: 90, life: 0.5 });
 
@@ -1019,13 +1026,50 @@
       c.fill();
       c.restore();
 
-      // Power percentage & title
+      // Power percentage & title - placed with vertical headroom above circular handle
       const pct = Math.round(this.power * 100);
-      U.text(c, 'PULL', x + w / 2, top - 24, { size: 10, weight: 900, color: '#a9a3d1' });
-      U.text(c, `${pct}%`, x + w / 2, top - 11, { size: 11, weight: 900, color: pct > 75 ? '#ff5d6c' : '#ffd166' });
+      U.text(c, 'PULL', x + w / 2, top - 36, { size: 10, weight: 900, color: '#a9a3d1' });
+      U.text(c, `${pct}%`, x + w / 2, top - 22, { size: 11, weight: 900, color: pct > 75 ? '#ff5d6c' : '#ffd166' });
     }
   }
 
+  // 8-Ball Pool
+  A.register({
+    id: '8ball',
+    name: '8-Ball Pool',
+    category: 'Pool',
+    tag: 'Solids vs Stripes',
+    icon: A.ICONS.pool,
+    desc: 'Pocket all solids or stripes, call your shots, and sink the 8-ball to win.',
+    rules: [
+      'Drag to aim your cue stick with ghost-ball guidelines.',
+      'Pull back the power slider on the left to set shot power and shoot.',
+      'First player to pocket an object ball claims Solids (1-7) or Stripes (9-15).',
+      'Clear your full group before pocketing the 8-ball to win.',
+      'Scratch or premature 8-ball pocket results in a foul or loss!'
+    ],
+    create: (stage, opts) => new PoolGame(stage, Object.assign({}, opts, { variant: '8ball', gameId: '8ball' }))
+  });
+
+  // 9-Ball Pool
+  A.register({
+    id: '9ball',
+    name: '9-Ball Pool',
+    category: 'Pool',
+    tag: 'Rotation Billiards',
+    icon: A.ICONS.nineball,
+    desc: 'Strike the lowest numbered ball first on every shot. Legally pocket the 9-ball to win!',
+    rules: [
+      'Drag to aim with precise ghost-ball cue projection.',
+      'Pull back the left slider to control power and strike.',
+      'Always hit the lowest numbered ball remaining on the table first.',
+      'Any legal shot that pockets the 9-ball (including combination shots) wins the match immediately!',
+      'Scratch or failing to hit the lowest ball first gives opponent ball-in-hand.'
+    ],
+    create: (stage, opts) => new PoolGame(stage, Object.assign({}, opts, { variant: '9ball', gameId: '9ball' }))
+  });
+
+  // Legacy alias
   A.register({
     id: 'pool',
     name: '8 Ball / 9 Ball',

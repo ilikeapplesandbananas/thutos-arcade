@@ -42,7 +42,9 @@
 
       Words.load().then(() => {
         this.validWords = Words.wordsFromLetters(this.bankLetters, 3);
-        this.startRound(0);
+        this.completedRounds = 0;
+        const first = (this.opts && this.opts.firstTurn != null) ? this.opts.firstTurn : 0;
+        this.startRound(first);
       });
     }
 
@@ -53,6 +55,14 @@
       this.activeRound = true;
       this.currentWord = '';
       this.usedBankIndices.clear();
+
+      // Fresh randomized 6-letter seed word for this round
+      if (playerIdx > 0 || !this.validWords || !this.validWords.length) {
+        const otherSeeds = SEEDS.filter(s => s !== this.seedWord);
+        this.seedWord = U.pick(otherSeeds.length ? otherSeeds : SEEDS);
+        this.bankLetters = this.seedWord.split('');
+        this.validWords = Words.wordsFromLetters(this.bankLetters, 3);
+      }
       this.shuffledBank = U.shuffle(this.bankLetters.slice());
 
       this.banner(playerIdx === 0 ? 'START!' : `${this.playerName(playerIdx)}'S TURN!`, { color: '#ffd166', dur: 1.2 });
@@ -170,15 +180,31 @@
       this.shuffledBank = U.shuffle(this.bankLetters.slice());
     }
 
+    canSpellFromBank(word) {
+      const counts = {};
+      for (const ch of this.bankLetters) {
+        const c = String(ch).toLowerCase();
+        counts[c] = (counts[c] || 0) + 1;
+      }
+      for (const ch of word.toLowerCase()) {
+        if (!counts[ch]) return false;
+        counts[ch]--;
+      }
+      return true;
+    }
+
     submitCurrentWord() {
-      const word = this.currentWord.toLowerCase();
+      const word = this.currentWord.trim().toLowerCase();
       this.clearWord();
       if (word.length < 3) return;
 
       const already = this.foundWords[this.round].has(word);
-      const isLegal = this.validWords.includes(word);
+      const canSpell = this.canSpellFromBank(word);
+      const inDict = Words.isWord(word, 3) || this.validWords.includes(word);
+      const isLegal = canSpell && inDict;
 
       if (isLegal && !already) {
+        if (!this.validWords.includes(word)) this.validWords.push(word);
         const pts = Words.anagramScore(word.length);
         this.scores[this.round] += pts;
         this.foundWords[this.round].add(word);
@@ -200,12 +226,12 @@
     runCpuSolving() {
       if (!this.activeRound || !this.cpuTurn) return;
 
-      const cpuCount = this.cpuSkill(10, 20, 32);
+      const cpuCount = this.cpuSkill(8, 18, 30);
 
       // Difficulty sorting: Hard targets the 5 and 6 letter anagrams first; Easy stays on 3 letters
       const sorted = this.validWords.slice().sort((a, b) => {
-        if (this.diff === 'hard') return b.length - a.length || (Math.random() - 0.5);
-        if (this.diff === 'easy') return a.length - b.length || (Math.random() - 0.5);
+        if (this.level === 'hard') return b.length - a.length || (Math.random() - 0.5);
+        if (this.level === 'easy') return a.length - b.length || (Math.random() - 0.5);
         return Math.random() - 0.5;
       });
       const targets = sorted.slice(0, cpuCount);
@@ -222,7 +248,7 @@
         this.banner(`+${pts} (${w.toUpperCase()})`, { color: '#ff5d6c', dur: 0.8, size: 26 });
         this.updateHUD();
 
-        const delay = this.cpuSkill(U.rand(3000, 4200), U.rand(2000, 2800), U.rand(1200, 1900));
+        const delay = this.cpuSkill(U.rand(2800, 3900), U.rand(1800, 2600), U.rand(1100, 1800));
         this.wait(delay, solveNext);
       };
 
@@ -252,12 +278,14 @@
       this.banner("TIME'S UP!", { color: '#ff5d6c', dur: 1.5 });
 
       this.wait(1600, () => {
-        if (this.round === 0) {
+        this.completedRounds = (this.completedRounds || 0) + 1;
+        if (this.completedRounds === 1) {
+          const nextPlayer = 1 - this.round;
           if (this.mode === 'local') {
-            this.handoff(1, `Pass to ${this.playerName(1)}`, `Same 6 letters! ${this.playerName(0)} scored ${this.scores[0]} pts. Beat it!`)
-              .then(() => this.startRound(1));
+            this.handoff(nextPlayer, `Pass to ${this.playerName(nextPlayer)}`, `${this.playerName(this.round)} scored ${this.scores[this.round]} pts. Beat it!`)
+              .then(() => this.startRound(nextPlayer));
           } else {
-            this.startRound(1);
+            this.startRound(nextPlayer);
           }
         } else {
           // Resolve match

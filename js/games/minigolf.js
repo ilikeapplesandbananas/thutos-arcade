@@ -141,6 +141,10 @@
       this.W = 420;
       this.H = 760;
 
+      // Pick 3 randomized holes from the 6 available courses so each match is unique!
+      const holePool = [0, 1, 2, 3, 4, 5];
+      this.matchHoles = U.shuffle(holePool).slice(0, 3);
+      this.currentRound = 0;
       this.currentHole = 0;
       this.strokes = [0, 0];       // strokes for current hole [p0, p1]
       this.totalScores = [0, 0];   // cumulative strokes across all holes
@@ -155,16 +159,21 @@
       this.loadHole(0);
     }
 
-    loadHole(holeIdx) {
-      this.currentHole = holeIdx;
-      this.course = COURSES[holeIdx];
+    loadHole(roundIdx) {
+      this.currentRound = roundIdx;
+      this.currentHole = roundIdx;
+      this.courseIdx = this.matchHoles[roundIdx];
+      this.course = COURSES[this.courseIdx];
       this.strokes = [0, 0];
       this.holeFinished = [false, false];
       this.turn = 0;
 
       this.resetBallToStart();
-      this.banner(`HOLE ${holeIdx + 1} · PAR ${this.course.par}`, { color: '#ffd166', dur: 1.2 });
+      this.banner(`HOLE ${roundIdx + 1} · PAR ${this.course.par}`, { color: '#ffd166', dur: 1.2 });
       this.updateHUD();
+      if (this.cpuTurn) {
+        this.wait(600, () => this.cpuPutt());
+      }
     }
 
     resetBallToStart() {
@@ -233,19 +242,19 @@
         let target = this.course.hole;
 
         // Waypoint navigation for doglegs, chokes & slaloms
-        if (this.currentHole === 2) {
+        if (this.courseIdx === 2) {
           // Hole 3 dogleg
           if (this.ball.y > 470 && this.ball.x < 190) {
             target = { x: 130, y: 460 };
           } else if (this.ball.y > 430 && this.ball.x < 240) {
             target = { x: 280, y: 440 };
           }
-        } else if (this.currentHole === 3) {
+        } else if (this.courseIdx === 3) {
           // Hole 4 Windmill Chute
           if (this.ball.y > 380) {
             target = { x: 210, y: 340 };
           }
-        } else if (this.currentHole === 5) {
+        } else if (this.courseIdx === 5) {
           // Hole 6 Grand Slalom
           if (this.ball.y > 490) {
             target = { x: 300, y: 500 };
@@ -298,8 +307,9 @@
       // Watchdog: ensures CPU never gets stuck or halts on any hole
       if (this.cpuTurn && !this.moving && !this.ball.inHole && !this.over && !this.ball.sinking) {
         this.cpuIdleTimer = (this.cpuIdleTimer || 0) + dt;
-        if (this.cpuIdleTimer > 1.4 && !this._cpuPuttPending) {
+        if (this.cpuIdleTimer > 1.4) {
           this.cpuIdleTimer = 0;
+          this._cpuPuttPending = false;
           this.cpuPutt();
         }
       } else {
@@ -445,14 +455,14 @@
           this.resetBallToStart();
           this.updateHUD();
           if (this.mode === 'local') {
-            this.handoff(opp, `Pass to ${this.playerName(opp)}`, `Hole ${this.currentHole + 1} · Par ${this.course.par}`);
+            this.handoff(opp, `Pass to ${this.playerName(opp)}`, `Hole ${this.currentRound + 1} · Par ${this.course.par}`);
           } else if (this.cpuTurn) {
             this.cpuPutt();
           }
         } else {
           // Both players finished hole -> move to next hole
-          if (this.currentHole < COURSES.length - 1) {
-            this.loadHole(this.currentHole + 1);
+          if (this.currentRound < this.matchHoles.length - 1) {
+            this.loadHole(this.currentRound + 1);
           } else {
             // Match finished: lowest total strokes wins
             const s0 = this.totalScores[0];
@@ -487,7 +497,7 @@
         score1: this.totalScores[1],
         p0sub: `Hole: ${this.strokes[0]}`,
         p1sub: `Hole: ${this.strokes[1]}`,
-        status: `Hole ${this.currentHole + 1} of ${COURSES.length} (Par ${this.course.par})`
+        status: `Hole ${this.currentRound + 1} of ${this.matchHoles.length} (Par ${this.course.par})`
       });
     }
 

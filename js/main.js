@@ -65,12 +65,32 @@
     $('soundBtn2').innerHTML = icon;
   }
 
+  const HighScores = {
+    get(gameId) {
+      try {
+        return parseInt(localStorage.getItem(`arcade.highscore.${gameId}`) || '0', 10);
+      } catch (_) { return 0; }
+    },
+    set(gameId, score) {
+      try {
+        const cur = this.get(gameId);
+        if (score > cur) {
+          localStorage.setItem(`arcade.highscore.${gameId}`, score.toString());
+          return true;
+        }
+      } catch (_) {}
+      return false;
+    }
+  };
+
   // Render Game Cards Grid
   function renderGrid() {
     const grid = $('grid');
     const filtered = selectedCategory === 'All' ? GAMES : GAMES.filter(g => g.category === selectedCategory);
 
     grid.innerHTML = filtered.map(g => {
+      const best = HighScores.get(g.id);
+      const bestHtml = best > 0 ? `<span class="tag best-tag">⭐ BEST: ${best}</span>` : '';
       return `
         <article class="card" data-id="${g.id}" tabindex="0">
           <div class="card-art" style="background:${cardGradient(g.id)}">${g.icon}</div>
@@ -80,6 +100,7 @@
             <p>${g.desc}</p>
             <div class="card-meta">
               <span class="tag">${g.variants ? g.variants.length + ' MODES' : 'CLASSIC'}</span>
+              ${bestHtml}
               <div class="play-dot">${ICONS.play}</div>
             </div>
           </div>
@@ -100,6 +121,8 @@
 
   function cardGradient(id) {
     const grads = {
+      '8ball': 'linear-gradient(135deg, #1b1b22, #145a32)',
+      '9ball': 'linear-gradient(135deg, #1b1b22, #b58900)',
       pool: 'linear-gradient(135deg, #2b1f4d, #145a32)',
       basketball: 'linear-gradient(135deg, #2b1f4d, #9c4221)',
       cuppong: 'linear-gradient(135deg, #2b1f4d, #a82333)',
@@ -174,7 +197,8 @@
     $('pl1').querySelector('.psub').textContent = '';
 
     $('gameName').textContent = activeGameDef.name;
-    $('gameStatus').textContent = '';
+    const curBest = HighScores.get(activeGameDef.id);
+    $('gameStatus').textContent = curBest > 0 ? `High Score: ${curBest}` : '';
 
     // Teardown previous game instance if any
     if (activeGameInstance) {
@@ -270,14 +294,35 @@
         }
 
         $('trophy').innerHTML = result.winner >= 0 ? ICONS.trophy : ICONS.handshake;
+
+        // High Score Tracking & Display
+        const p0Num = parseInt(p0Score, 10) || 0;
+        const gid = activeGameDef ? activeGameDef.id : 'game';
+        const isNewBest = HighScores.set(gid, p0Num);
+        const bestScore = HighScores.get(gid);
+        const hsEl = $('resultHighScore');
+        if (hsEl) {
+          if (isNewBest && p0Num > 0) {
+            hsEl.innerHTML = `<span class="new-best-pill">🌟 NEW HIGH SCORE: ${bestScore} 🌟</span>`;
+          } else if (bestScore > 0) {
+            hsEl.innerHTML = `<span class="best-pill">High Score: <b>${bestScore}</b></span>`;
+          } else {
+            hsEl.innerHTML = '';
+          }
+        }
+
         $('results').classList.add('open');
       }
     };
+
+    // Shuffle who plays first when playing against CPU!
+    const firstTurn = mode === 'cpu' ? (Math.random() < 0.5 ? 0 : 1) : 0;
 
     activeGameInstance = activeGameDef.create(stage, {
       mode,
       level,
       variant,
+      firstTurn,
       names: [meName, mode === 'cpu' ? 'CPU' : p2Name],
       ui
     });
@@ -290,6 +335,7 @@
       activeGameInstance.destroy();
       activeGameInstance = null;
     }
+    renderGrid();
     $('gameScreen').classList.remove('open');
     $('gameScreen').setAttribute('aria-hidden', 'true');
     $('setup').classList.remove('open');

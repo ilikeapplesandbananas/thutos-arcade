@@ -14,7 +14,7 @@
       this.ui = opts.ui;
       this.W = 420; this.H = 760;       // logical world (portrait, like a phone)
       this.scale = 1; this.ox = 0; this.oy = 0; this.dpr = 1; this.cw = 420; this.ch = 760;
-      this.turn = 0;
+      this.turn = (opts && opts.firstTurn != null) ? opts.firstTurn : 0;
       this.timeScale = 1;
       this.time = 0;
       this.paused = false;

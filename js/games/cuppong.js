@@ -24,7 +24,7 @@
       ];
 
       this.shotsLeft = 2;
-      this.turn = 0;
+      this.turn = (this.opts && this.opts.firstTurn != null) ? this.opts.firstTurn : 0;
       this.ball = null;
       this.swipeStart = null;
       this.dragAim = null;
@@ -32,12 +32,15 @@
 
       this.spawnBall();
       this.hud({
-        score0: 10,
-        score1: 10,
-        p0sub: '2 shots left',
-        p1sub: '10 cups',
-        status: `${this.playerName(0)}'s turn · Drag back to aim or flick!`
+        score0: 0,
+        score1: 0,
+        p0sub: '🔴 Red · 10 cups',
+        p1sub: '🔵 Blue · 10 cups',
+        status: `${this.playerName(this.turn)}'s turn · Drag back to aim or flick!`
       });
+      if (this.cpuTurn) {
+        this.wait(700, () => this.cpuShoot());
+      }
     }
 
     createTriangleRack() {
@@ -323,8 +326,8 @@
       this.hud({
         score0: 10 - c0,
         score1: 10 - c1,
-        p0sub: this.turn === 0 ? `${this.shotsLeft} shot${this.shotsLeft === 1 ? '' : 's'} left` : `${c0} cups left`,
-        p1sub: this.turn === 1 ? `${this.shotsLeft} shot${this.shotsLeft === 1 ? '' : 's'} left` : `${c1} cups left`
+        p0sub: this.turn === 0 ? `🔴 Red · ${this.shotsLeft} left` : `🔴 Red · ${c0} cups`,
+        p1sub: this.turn === 1 ? `🔵 Blue · ${this.shotsLeft} left` : `🔵 Blue · ${c1} cups`
       });
 
       if (this.shotsLeft > 0) {
@@ -395,11 +398,27 @@
       c.lineTo(t.x, t.btmY);
       c.stroke();
 
-      // 2. Target Cups (10 Red Solo Cups)
+      // 2. Target Cups (Player 0 = Red Solo Cups, Player 1/CPU = Blue Solo Cups)
       const targetCups = this.cups[this.turn];
+      const cupColor = this.turn === 0 ? 'red' : 'blue';
       for (const cup of targetCups) {
-        if (!cup.sunk) this.renderCup(c, cup);
+        if (!cup.sunk) this.renderCup(c, cup, cupColor);
       }
+
+      // Turn / Team badge at top of table
+      c.save();
+      c.fillStyle = cupColor === 'red' ? 'rgba(201, 42, 42, 0.85)' : 'rgba(24, 100, 171, 0.85)';
+      U.rr(c, this.W / 2 - 75, t.topY - 34, 150, 24, 12);
+      c.fill();
+      c.strokeStyle = '#ffffff';
+      c.lineWidth = 1;
+      c.stroke();
+      U.text(c, cupColor === 'red' ? '🔴 RED TEAM CUPS' : '🔵 BLUE TEAM CUPS', this.W / 2, t.topY - 21, {
+        size: 11,
+        weight: 800,
+        color: '#ffffff'
+      });
+      c.restore();
 
       // 3. Re-rack button indicator (if available)
       const remaining = targetCups.filter(cup => !cup.sunk).length;
@@ -430,7 +449,7 @@
       }
     }
 
-    renderCup(c, cup) {
+    renderCup(c, cup, colorScheme = 'red') {
       const { x, y, r } = cup;
       const h = r * 2.8;
 
@@ -441,13 +460,20 @@
       c.ellipse(x, y + h * 0.45, r * 1.15, r * 0.45, 0, 0, Math.PI * 2);
       c.fill();
 
-      // Red cup trapezoid body with specular highlights
-      const redGrad = c.createLinearGradient(x - r, y, x + r, y);
-      redGrad.addColorStop(0, '#c92a2a');
-      redGrad.addColorStop(0.35, '#ff6b6b');
-      redGrad.addColorStop(0.7, '#e03131');
-      redGrad.addColorStop(1, '#a61e1e');
-      c.fillStyle = redGrad;
+      // Solo cup trapezoid body (Red Solo cup or Blue Solo cup) with specular highlights
+      const bodyGrad = c.createLinearGradient(x - r, y, x + r, y);
+      if (colorScheme === 'blue') {
+        bodyGrad.addColorStop(0, '#1864ab');
+        bodyGrad.addColorStop(0.35, '#339af0');
+        bodyGrad.addColorStop(0.7, '#1c7ed6');
+        bodyGrad.addColorStop(1, '#0f487f');
+      } else {
+        bodyGrad.addColorStop(0, '#c92a2a');
+        bodyGrad.addColorStop(0.35, '#ff6b6b');
+        bodyGrad.addColorStop(0.7, '#e03131');
+        bodyGrad.addColorStop(1, '#a61e1e');
+      }
+      c.fillStyle = bodyGrad;
 
       c.beginPath();
       c.moveTo(x - r, y);

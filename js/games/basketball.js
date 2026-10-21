@@ -55,7 +55,9 @@
         status: `${this.playerName(0)}'s turn · Swipe to shoot!`
       });
 
-      this.startRound(0);
+      this.completedRounds = 0;
+      const first = (this.opts && this.opts.firstTurn != null) ? this.opts.firstTurn : 0;
+      this.startRound(first);
     }
 
     startRound(playerIdx) {
@@ -360,13 +362,14 @@
       this.banner("TIME'S UP!", { color: '#ff5d6c', dur: 1.5 });
 
       this.wait(1600, () => {
-        if (this.round === 0) {
-          // Move to Player 2 / CPU round
+        this.completedRounds = (this.completedRounds || 0) + 1;
+        if (this.completedRounds === 1) {
+          const nextPlayer = 1 - this.round;
           if (this.mode === 'local') {
-            this.handoff(1, `Pass to ${this.playerName(1)}`, `${this.playerName(0)} scored ${this.scores[0]} pts. Beat it!`)
-              .then(() => this.startRound(1));
+            this.handoff(nextPlayer, `Pass to ${this.playerName(nextPlayer)}`, `${this.playerName(this.round)} scored ${this.scores[this.round]} pts. Beat it!`)
+              .then(() => this.startRound(nextPlayer));
           } else {
-            this.startRound(1);
+            this.startRound(nextPlayer);
           }
         } else {
           // Both rounds complete: resolve match
