@@ -136,6 +136,24 @@
       });
     }
 
+    skipCpu() {
+      if (!this.cpuTurn || this.over) return;
+      if (!this.moving) {
+        const own = this.penguins.filter(p => p.alive && p.team === 1);
+        const foes = this.penguins.filter(p => p.alive && p.team === 0);
+        if (own.length && foes.length) {
+          const striker = U.pick(own);
+          const foe = U.pick(foes);
+          this.launchPenguin(striker, foe.x - striker.x, foe.y - striker.y, 100);
+        }
+      }
+      let guard = 0;
+      while (this.moving && guard < 400) {
+        this.update(0.04);
+        guard++;
+      }
+    }
+
     /* ---------- Physics Loop ---------- */
     update(dt) {
       if (!this.moving) return;

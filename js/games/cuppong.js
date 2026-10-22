@@ -215,6 +215,33 @@
       });
     }
 
+    skipCpu() {
+      if (!this.cpuTurn || this.over) return;
+      const targetCups = this.cups[1].filter(c => !c.sunk);
+      if (!targetCups.length) return;
+      const accuracy = this.cpuSkill(0.42, 0.72, 0.94);
+      if (Math.random() < accuracy) {
+        const target = U.pick(targetCups);
+        target.sunk = true;
+        Sound.splash();
+        this.fx.burst(target.x, target.y, 25, { colors: ['#ffd166', '#ff5d6c'], speed: 180, life: 0.6 });
+        const remaining = this.cups[1].filter(c => !c.sunk).length;
+        if (remaining === 0) {
+          this.finish({
+            winner: 1,
+            title: `${this.playerName(1)} wins!`,
+            text: 'All opponent cups cleared!'
+          });
+          return;
+        }
+      }
+      this.ball = null;
+      this.turn = 0;
+      this.spawnBall();
+      this.updateHUD();
+      this.status(`${this.playerName(0)}'s turn · Swipe to throw!`);
+    }
+
     /* ---------- Physics Loop ---------- */
     update(dt) {
       const b = this.ball;

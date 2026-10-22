@@ -357,13 +357,13 @@
       if (!this.activeRound || !this.cpuTurn) return;
 
       const allFormations = this.findWordFormations();
-      // Difficulty calibration:
-      // Easy: 5-7 simple 2-3 letter words
-      // Medium: 9-13 words (3-5 letters)
-      // Hard: 15-20 words (up to 6 letters)
-      const targetCount = this.cpuSkill(6, 11, 18);
-      const minWordLen = this.cpuSkill(2, 3, 3);
-      const maxWordLen = this.cpuSkill(4, 5, 6);
+      // Smart human-like word targets per difficulty:
+      // Easy: 12-16 words
+      // Medium: 22-30 words
+      // Hard: 35-50 words (expert GamePigeon player!)
+      const targetCount = this.cpuSkill(14, 26, 42);
+      const minWordLen = this.cpuSkill(2, 2, 3);
+      const maxWordLen = this.cpuSkill(4, 5, 7);
 
       const filtered = allFormations.filter(f => f.word.length >= minWordLen && f.word.length <= maxWordLen);
       const sorted = U.shuffle(filtered).sort((a, b) => {
@@ -375,17 +375,17 @@
       const makeCpuMove = () => {
         if (!this.activeRound || !this.cpuTurn || placedCount >= targetCount) return;
 
-        // Find a formation whose blocks are currently unplaced
+        let success = false;
+
+        // 1. Try to place an unplaced formation
         for (const f of sorted) {
           const allFree = f.blocks.every(b => !b.placed);
           if (!allFree) continue;
 
-          let success = false;
           if (f.orientation === 'H') {
             const totalW = f.blocks.reduce((acc, b) => acc + b.w, 0);
             for (let r = 0; r < this.rows && !success; r++) {
               for (let col = 0; col <= this.cols - totalW && !success; col++) {
-                // Check if all cells empty
                 let canFit = true;
                 for (let i = 0; i < totalW; i++) {
                   if (this.grid[r][col + i] !== null) { canFit = false; break; }
@@ -428,12 +428,48 @@
           }
         }
 
-        // Delay between moves: Easy ~3.6s, Medium ~2.6s, Hard ~1.6s
-        const delay = this.cpuSkill(U.rand(3400, 4400), U.rand(2400, 3200), U.rand(1500, 2200));
+        // 2. If no new words fit with current board, recycle blocks back to tray to build new combos
+        if (!success) {
+          const placedBlocks = this.blocks.filter(b => b.placed);
+          if (placedBlocks.length) {
+            const b = U.pick(placedBlocks);
+            this.removeBlockFromGrid(b);
+            b.x = b.trayX;
+            b.y = b.trayY;
+          }
+        }
+
+        // Realistic solving tempo
+        // Easy: 2.2s - 3.2s
+        // Medium: 1.3s - 2.0s
+        // Hard: 0.75s - 1.25s
+        const delay = this.cpuSkill(U.rand(2200, 3200), U.rand(1300, 2000), U.rand(750, 1250));
         this.wait(delay, makeCpuMove);
       };
 
-      this.wait(1400, makeCpuMove);
+      this.wait(1000, makeCpuMove);
+    }
+
+    skipCpu() {
+      if (!this.activeRound || !this.cpuTurn) return;
+      const allFormations = this.findWordFormations();
+      const targetCount = this.cpuSkill(14, 26, 42);
+      const sorted = allFormations.slice().sort((a, b) => {
+        return this.level === 'hard' ? b.word.length - a.word.length : (Math.random() - 0.5);
+      });
+      for (const f of sorted) {
+        if (this.foundWords[1].size >= targetCount) break;
+        const w = f.word.toLowerCase();
+        if (!this.foundWords[1].has(w) && Words.isWord(w, 2)) {
+          const pts = Words.huntScore(w.length);
+          this.scores[1] += pts;
+          this.foundWords[1].add(w);
+        }
+      }
+      this.timeLeft = 0;
+      this.activeRound = false;
+      this.updateHUD();
+      this.endRound();
     }
 
     /* ---------- Timer & Round Loop ---------- */

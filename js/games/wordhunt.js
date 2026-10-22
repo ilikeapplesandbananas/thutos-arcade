@@ -191,20 +191,27 @@
 
       // Find all possible words on this 4x4 grid via DFS
       const allWords = this.solveGrid();
-      const skillCount = this.cpuSkill(10, 22, 38);
+      // Smart human-like word targets per difficulty:
+      // Easy: 18-25 words (mostly 3-4 letters)
+      // Medium: 32-45 words (solid 4-6 letters)
+      // Hard: 55-75 words (pro tournament player prioritizing 6-8 letter words!)
+      const skillCount = this.cpuSkill(20, 38, 65);
 
-      // Difficulty sorting: Hard prioritizes long high-scoring words; Easy stays with 3-4 letter words
+      // Difficulty sorting: Hard prioritizes longest/highest scoring words first
       const sorted = allWords.slice().sort((a, b) => {
         if (this.level === 'hard') return b.length - a.length || (Math.random() - 0.5);
-        if (this.level === 'easy') return a.length - b.length || (Math.random() - 0.5);
-        return Math.random() - 0.5;
+        if (this.level === 'medium') {
+          const scoreDiff = Words.huntScore(b.length) - Words.huntScore(a.length);
+          return Math.random() < 0.7 ? scoreDiff : (Math.random() - 0.5);
+        }
+        return a.length - b.length || (Math.random() - 0.5);
       });
-      const selectedWords = sorted.slice(0, skillCount);
+      this._cpuSelectedWords = sorted.slice(0, skillCount);
+      this._cpuWordIdx = 0;
 
-      let idx = 0;
       const submitNext = () => {
-        if (!this.activeRound || !this.cpuTurn || idx >= selectedWords.length) return;
-        const w = selectedWords[idx++];
+        if (!this.activeRound || !this.cpuTurn || this._cpuWordIdx >= this._cpuSelectedWords.length) return;
+        const w = this._cpuSelectedWords[this._cpuWordIdx++];
         const pts = Words.huntScore(w.length);
         this.scores[1] += pts;
         this.foundWords[1].add(w);
@@ -213,7 +220,7 @@
         const path = this.findPathForWord(w);
         if (path) {
           this.path = path;
-          this.wait(400, () => { if (this.cpuTurn) this.path = []; });
+          this.wait(350, () => { if (this.cpuTurn) this.path = []; });
         }
 
         Sound.letter(Math.min(6, w.length));
@@ -221,11 +228,31 @@
         this.floatingWords.push({ text: w.toUpperCase(), pts, t: 0, dur: 1.0 });
         this.updateHUD();
 
-        const delay = this.cpuSkill(U.rand(2800, 4000), U.rand(1800, 2600), U.rand(1100, 1800));
+        // Realistic human solving pace:
+        // Easy: 2.0s - 2.8s
+        // Medium: 1.2s - 1.8s
+        // Hard: 0.65s - 1.1s
+        const delay = this.cpuSkill(U.rand(2000, 2800), U.rand(1200, 1800), U.rand(650, 1100));
         this.wait(delay, submitNext);
       };
 
-      this.wait(1500, submitNext);
+      this.wait(1000, submitNext);
+    }
+
+    skipCpu() {
+      if (!this.activeRound || !this.cpuTurn) return;
+      if (this._cpuSelectedWords) {
+        while (this._cpuWordIdx < this._cpuSelectedWords.length) {
+          const w = this._cpuSelectedWords[this._cpuWordIdx++];
+          const pts = Words.huntScore(w.length);
+          this.scores[1] += pts;
+          this.foundWords[1].add(w);
+        }
+      }
+      this.timeLeft = 0;
+      this.activeRound = false;
+      this.updateHUD();
+      this.endRound();
     }
 
     findPathForWord(word) {

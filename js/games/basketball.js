@@ -1,4 +1,4 @@
-/* Basketball — GamePigeon style with 30s clock, swipe shot, backboard/rim physics, moving hoop & On Fire streak! */
+/* Basketball — Authentic GamePigeon style: rapid-fire multi-ball shooting, 60s clock, backboard/rim physics, moving hoop & On Fire streak! */
 (function (A) {
   const { U, Sound } = A;
 
@@ -7,15 +7,15 @@
       this.W = 420;
       this.H = 760;
 
-      // Hoop configuration (at depth z = 1.0)
+      // Hoop configuration (depth z = 1.0)
       this.hoop = {
         baseX: this.W / 2,
         x: this.W / 2,
         y: 195,
-        width: 66,
+        width: 68,
         rimRadius: 5.5,
         moving: false,
-        moveSpeed: 110,
+        moveSpeed: 115,
         moveDir: 1,
         netPhase: 0
       };
@@ -25,12 +25,12 @@
       this.round = 0; // 0 for player 1, 1 for player 2
       this.streak = 0;
       this.onFire = false;
-      this.timeLeft = 30.0;
+      this.timeLeft = 60.0;
       this.activeRound = false;
 
       // Ball spawn point
       this.spawnX = this.W / 2;
-      this.spawnY = this.H - 140;
+      this.spawnY = this.H - 135;
       this.ballRadius = 32;
 
       // 3D Net spring dynamics
@@ -43,16 +43,19 @@
         vSwayX: 0
       };
 
-      // Ball state
-      this.ball = null;
-      this.trail = [];
+      // Multi-ball management: ready ball at bottom + all in-flight balls
+      this.readyBall = null;
+      this.respawnTimer = 0;
+      this.inFlightBalls = [];
       this.swipeStart = null;
-      this.spawnBall();
+      this.draggingReadyBall = false;
+
+      this.spawnReadyBall();
 
       this.hud({
         score0: 0,
         score1: 0,
-        status: `${this.playerName(0)}'s turn · Swipe to shoot!`
+        status: `${this.playerName(0)}'s turn · Flick to shoot!`
       });
 
       this.completedRounds = 0;
@@ -65,60 +68,68 @@
       this.round = playerIdx;
       this.streak = 0;
       this.onFire = false;
-      this.timeLeft = 30.0;
-      // Moving hoop activates in Round 2 or when score >= 10
-      this.hoop.moving = (playerIdx === 1) || (this.scores[playerIdx] >= 10);
+      this.timeLeft = 60.0; // Authentic GamePigeon 60-second round!
+      this.hoop.moving = false;
       this.hoop.x = this.hoop.baseX;
       this.activeRound = true;
-      this.spawnBall();
+      this.inFlightBalls = [];
+      this.respawnTimer = 0;
+      this.spawnReadyBall();
 
       const bannerText = playerIdx === 0 ? 'START!' : `${this.playerName(playerIdx)}'S TURN!`;
-      const subText = this.hoop.moving ? 'ROUND 2 · MOVING HOOP!' : '';
-      this.banner(bannerText, { color: '#ffd166', dur: 1.2, sub: subText });
+      this.banner(bannerText, { color: '#ffd166', dur: 1.2, sub: '60 SECONDS · RAPID FIRE!' });
       Sound.whistle ? Sound.whistle() : Sound.good();
 
       if (this.cpuTurn) {
         this.status(`CPU is shooting...`);
         this.scheduleCpuShots();
       } else {
-        this.status(this.hoop.moving ? `Round 2: Moving hoop! Flick to shoot!` : `Flick upward to shoot! Streak 3 to catch FIRE!`);
+        this.status(`Flick upward rapid-fire! Streak 3 to catch FIRE 🔥`);
       }
     }
 
-    spawnBall() {
-      this.ball = {
+    spawnReadyBall() {
+      this.readyBall = {
         x: this.spawnX,
         y: this.spawnY,
-        z: 0, // 0 = near screen, 1 = hoop depth, >1 = behind backboard
-        vx: 0,
-        vy: 0,
-        vz: 0,
-        rot: 0,
-        vrot: 0,
-        inAir: false,
-        scored: false,
-        hitRim: false
+        rot: 0
       };
-      this.trail = [];
+    }
+
+    skipCpu() {
+      if (!this.activeRound || !this.cpuTurn) return;
+      // Calculate realistic CPU final score based on difficulty and remaining time
+      const skill = this.cpuSkill(0.46, 0.72, 0.90);
+      const remainingSecs = Math.max(0, this.timeLeft);
+      const estShots = Math.round(remainingSecs * 0.9);
+      const makes = Math.round(estShots * skill);
+      const fireBonus = Math.floor(makes * 0.28);
+      this.scores[this.round] += makes + fireBonus;
+      this.timeLeft = 0;
+      this.inFlightBalls = [];
+      this.readyBall = null;
+      this.updateHUD();
+      this.endRound();
     }
 
     /* ---------- Input ---------- */
     onDown(p) {
-      if (!this.activeRound || this.cpuTurn || !this.ball || this.ball.inAir) return;
-      if (U.dist(p.x, p.y, this.ball.x, this.ball.y) < this.ballRadius * 3.5 || p.y > this.H * 0.65) {
+      if (!this.activeRound || this.cpuTurn || !this.readyBall) return;
+      if (U.dist(p.x, p.y, this.readyBall.x, this.readyBall.y) < this.ballRadius * 3.5 || p.y > this.H * 0.65) {
         this.swipeStart = { x: p.x, y: p.y, t: performance.now() };
+        this.draggingReadyBall = true;
       }
     }
 
     onMove(p) {
-      if (!this.swipeStart || this.ball.inAir) return;
-      // Ball slightly follows drag
-      this.ball.x = this.spawnX + (p.x - this.swipeStart.x) * 0.25;
-      this.ball.y = this.spawnY + Math.min(0, (p.y - this.swipeStart.y) * 0.4);
+      if (!this.draggingReadyBall || !this.readyBall || !this.swipeStart) return;
+      this.readyBall.x = this.spawnX + (p.x - this.swipeStart.x) * 0.25;
+      this.readyBall.y = this.spawnY + Math.min(0, (p.y - this.swipeStart.y) * 0.35);
     }
 
     onUp(p) {
-      if (!this.swipeStart || this.ball.inAir) return;
+      if (!this.draggingReadyBall || !this.readyBall || !this.swipeStart) return;
+      this.draggingReadyBall = false;
       const dt = (performance.now() - this.swipeStart.t) / 1000;
       const dx = p.x - this.swipeStart.x;
       const dy = p.y - this.swipeStart.y;
@@ -126,27 +137,39 @@
 
       // Only shoot if swiped upward
       if (dy < -25 && dt < 0.75) {
-        this.shootBall(dx, dy, dt);
+        this.launchBall(this.readyBall.x, this.readyBall.y, dx, dy, dt);
+        this.readyBall = null;
+        this.respawnTimer = 0.14; // Immediate rapid-fire respawn (140ms)!
       } else {
-        // Return ball to spawn
-        this.ball.x = this.spawnX;
-        this.ball.y = this.spawnY;
+        this.readyBall.x = this.spawnX;
+        this.readyBall.y = this.spawnY;
       }
     }
 
-    shootBall(dx, dy, dt) {
-      if (!this.ball || this.ball.inAir) return;
-      this.ball.inAir = true;
-
-      // Velocity calculation tuned for GamePigeon arc feel
+    launchBall(originX, originY, dx, dy, dt) {
       const speedY = Math.abs(dy) / Math.max(0.06, dt);
       const speedX = dx / Math.max(0.06, dt);
 
-      this.ball.vx = U.clamp(speedX * 0.72, -320, 320);
-      this.ball.vy = -U.clamp(speedY * 0.85, 520, 880);
-      this.ball.vz = U.clamp(speedY * 0.0016, 1.1, 1.6);
-      this.ball.vrot = -this.ball.vx * 0.02 - 6;
+      const vx = U.clamp(speedX * 0.72, -320, 320);
+      const vy = -U.clamp(speedY * 0.85, 520, 880);
+      const vz = U.clamp(speedY * 0.0016, 1.1, 1.6);
+      const vrot = -vx * 0.02 - 6;
 
+      const ball = {
+        x: originX,
+        y: originY,
+        z: 0,
+        vx,
+        vy,
+        vz,
+        rot: 0,
+        vrot,
+        scored: false,
+        hitRim: false,
+        trail: []
+      };
+
+      this.inFlightBalls.push(ball);
       Sound.whoosh();
     }
 
@@ -154,19 +177,16 @@
     scheduleCpuShots() {
       if (!this.activeRound || !this.cpuTurn) return;
 
-      const shootInterval = this.cpuSkill(1300, 950, 700);
+      // Rapid-fire CPU interval based on difficulty
+      const shootInterval = this.cpuSkill(1150, 900, 720);
       this.wait(shootInterval, () => {
         if (!this.activeRound || !this.cpuTurn) return;
-        if (!this.ball || this.ball.inAir) {
-          this.scheduleCpuShots();
-          return;
-        }
 
         // Calculate lead on moving hoop
-        const lead = this.hoop.moving ? this.hoop.moveDir * this.cpuSkill(10, 18, 25) : 0;
+        const lead = this.hoop.moving ? this.hoop.moveDir * this.cpuSkill(12, 20, 26) : 0;
         const targetX = this.hoop.x + lead;
-        const aimDx = targetX - this.ball.x;
-        const accuracy = this.cpuSkill(0.50, 0.74, 0.92);
+        const aimDx = targetX - this.spawnX;
+        const accuracy = this.cpuSkill(0.48, 0.74, 0.92);
 
         let dx = aimDx * 0.8;
         if (Math.random() > accuracy) {
@@ -174,14 +194,15 @@
         }
 
         const dy = -260 + U.rand(-16, 16);
-        this.shootBall(dx, dy, 0.18);
+        this.launchBall(this.spawnX, this.spawnY, dx, dy, 0.18);
+
         this.scheduleCpuShots();
       });
     }
 
     /* ---------- Physics Loop ---------- */
     update(dt) {
-      // 1. Timer countdown
+      // 1. Timer countdown (60s total)
       if (this.activeRound) {
         this.timeLeft -= dt;
         if (this.timeLeft <= 0) {
@@ -190,31 +211,36 @@
           this.endRound();
           return;
         }
-        this.hud({
-          p0sub: this.round === 0 ? `${Math.ceil(this.timeLeft)}s` : `${this.scores[0]} pts`,
-          p1sub: this.round === 1 ? `${Math.ceil(this.timeLeft)}s` : `${this.scores[1]} pts`
-        });
+        this.updateHUD();
       }
 
-      // 2. Moving hoop logic (activates once 10+ points reached)
+      // 2. Rapid-fire ball respawn
+      if (this.activeRound && !this.readyBall && !this.cpuTurn) {
+        this.respawnTimer -= dt;
+        if (this.respawnTimer <= 0) {
+          this.spawnReadyBall();
+        }
+      }
+
+      // 3. Moving hoop logic (GamePigeon rule: starts moving at 30s remaining or 10+ points!)
       const currentScore = this.scores[this.round];
-      if (currentScore >= 10 && !this.hoop.moving) {
+      if ((this.timeLeft <= 30.0 || currentScore >= 10) && !this.hoop.moving) {
         this.hoop.moving = true;
         this.banner('MOVING HOOP!', { color: '#ffd166', size: 36 });
       }
 
       if (this.hoop.moving) {
         this.hoop.x += this.hoop.moveSpeed * this.hoop.moveDir * dt;
-        if (this.hoop.x > this.hoop.baseX + 110) {
-          this.hoop.x = this.hoop.baseX + 110;
+        if (this.hoop.x > this.hoop.baseX + 115) {
+          this.hoop.x = this.hoop.baseX + 115;
           this.hoop.moveDir = -1;
-        } else if (this.hoop.x < this.hoop.baseX - 110) {
-          this.hoop.x = this.hoop.baseX - 110;
+        } else if (this.hoop.x < this.hoop.baseX - 115) {
+          this.hoop.x = this.hoop.baseX - 115;
           this.hoop.moveDir = 1;
         }
       }
 
-      // 3. 3D Net spring physics simulation
+      // 4. 3D Net spring physics simulation
       const n = this.net;
       n.vBulge += (-n.bulge * 140 - n.vBulge * 14) * dt;
       n.bulge += n.vBulge * dt;
@@ -223,114 +249,111 @@
       n.vSwayX += (-n.swayX * 110 - n.vSwayX * 11) * dt;
       n.swayX += n.vSwayX * dt;
 
-      // 4. Ball motion & collisions
-      const b = this.ball;
-      if (!b || !b.inAir) return;
-
-      b.x += b.vx * dt;
-      b.y += b.vy * dt;
-      b.z += b.vz * dt;
-      b.vy += 1250 * dt; // gravity
-      b.rot += b.vrot * dt;
-
-      // Interactive net swish cradle physics
-      if (b.scored && b.inAir) {
-        const rimY = this.hoop.y;
-        if (b.y >= rimY - 12 && b.y <= rimY + 85) {
-          // Ball is travelling inside the net: net catches, stretches, bulges & sways
-          const netPct = (b.y - rimY + 12) / 97;
-          n.vStretch += 460 * dt;
-          n.vBulge += 380 * Math.sin(netPct * Math.PI) * dt;
-          n.swayX += (b.x - this.hoop.x) * 1.5 * dt;
-
-          // Funnel ball through center with gentle drag
-          b.vy = Math.min(b.vy, 280);
-          b.vx *= 0.82;
-          b.x += (this.hoop.x - b.x) * 0.18;
-        } else if (b.y > rimY + 85 && b.y < rimY + 125) {
-          if (n.vStretch < 80) n.vStretch = 150;
-        }
-      }
-
-      // Particle trail for On Fire
-      if (this.onFire) {
-        this.trail.push({ x: b.x, y: b.y, z: b.z, t: 0 });
-        if (Math.random() < 0.45) {
-          this.fx.burst(b.x, b.y, 3, { colors: ['#ffd166', '#ff5d6c', '#ff9f43'], speed: 60, life: 0.35 });
-        }
-      }
-      for (const t of this.trail) t.t += dt;
-      this.trail = this.trail.filter(t => t.t < 0.28);
-
-      // Backboard collision (when ball reaches z ~= 1.0)
+      // 5. Multi-ball physics & collisions
       const boardY = this.hoop.y - 75;
-      const boardW = 140;
+      const boardW = 145;
       const boardH = 100;
-
-      if (b.z >= 0.94 && b.z <= 1.20 && b.vy < 0) {
-        if (Math.abs(b.x - this.hoop.x) < boardW / 2 && b.y > boardY && b.y < boardY + boardH) {
-          b.vz = -Math.abs(b.vz) * 0.45;
-          b.vx += (b.x - this.hoop.x) * 0.6;
-          Sound.rim();
-        }
-      }
-
-      // Rim & Basket detection (at hoop depth z ~= 0.85 to 1.25)
       const rimY = this.hoop.y;
       const rimW = this.hoop.width;
       const leftRimX = this.hoop.x - rimW / 2;
       const rightRimX = this.hoop.x + rimW / 2;
 
-      if (b.z >= 0.82 && b.z <= 1.25) {
-        // 1. Swish / Basket detection (evaluated FIRST so valid shots are never rejected by rim beads)
-        const dxFromCenter = b.x - this.hoop.x;
-        const dyFromRim = b.y - rimY;
+      this.inFlightBalls = this.inFlightBalls.filter(b => {
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        b.z += b.vz * dt;
+        b.vy += 1250 * dt; // gravity
+        b.rot += b.vrot * dt;
 
-        if (!b.scored && b.vy > 30 && Math.abs(dxFromCenter) < rimW * 0.46 && dyFromRim >= -16 && dyFromRim <= 32) {
-          b.scored = true;
-          b.vx = (this.hoop.x - b.x) * 3;
-          b.vy = Math.min(b.vy, 280);
-          this.scoreBasket();
+        // Interactive net swish cradle physics
+        if (b.scored) {
+          if (b.y >= rimY - 12 && b.y <= rimY + 85) {
+            const netPct = (b.y - rimY + 12) / 97;
+            n.vStretch += 460 * dt;
+            n.vBulge += 380 * Math.sin(netPct * Math.PI) * dt;
+            n.swayX += (b.x - this.hoop.x) * 1.5 * dt;
+
+            // Funnel ball through center with gentle net friction
+            b.vy = Math.min(b.vy, 280);
+            b.vx *= 0.82;
+            b.x += (this.hoop.x - b.x) * 0.18;
+          } else if (b.y > rimY + 85 && b.y < rimY + 125) {
+            if (n.vStretch < 80) n.vStretch = 150;
+          }
         }
 
-        // 2. Rim collision (evaluated only if ball has not already scored)
-        if (!b.scored && b.z >= 0.85 && b.z <= 1.18) {
-          const effectiveR = this.ballRadius * (1 - b.z * 0.45) * 0.62 + 5;
-          const dLeft = U.dist(b.x, b.y, leftRimX, rimY);
-          const dRight = U.dist(b.x, b.y, rightRimX, rimY);
+        // Particle trail for On Fire
+        if (this.onFire) {
+          b.trail.push({ x: b.x, y: b.y, z: b.z, t: 0 });
+          if (Math.random() < 0.40) {
+            this.fx.burst(b.x, b.y, 3, { colors: ['#ffd166', '#ff5d6c', '#ff9f43'], speed: 60, life: 0.35 });
+          }
+        }
+        for (const t of b.trail) t.t += dt;
+        b.trail = b.trail.filter(t => t.t < 0.28);
 
-          if (dLeft < effectiveR) {
-            const nx = (b.x - leftRimX) / (dLeft || 1);
-            b.vx = nx * 140 - 45;
-            b.vy = -Math.abs(b.vy) * 0.52 - 30;
-            b.hitRim = true;
-            this.net.vSwayX -= 40;
-            Sound.rim();
-          } else if (dRight < effectiveR) {
-            const nx = (b.x - rightRimX) / (dRight || 1);
-            b.vx = nx * 140 + 45;
-            b.vy = -Math.abs(b.vy) * 0.52 - 30;
-            b.hitRim = true;
-            this.net.vSwayX += 40;
+        // Backboard collision (when ball reaches backboard depth z ~= 0.94 - 1.20)
+        if (b.z >= 0.94 && b.z <= 1.22 && b.vy < 0) {
+          if (Math.abs(b.x - this.hoop.x) < boardW / 2 && b.y > boardY && b.y < boardY + boardH) {
+            b.vz = -Math.abs(b.vz) * 0.48; // Rebound forward towards camera!
+            b.vx += (b.x - this.hoop.x) * 0.6;
             Sound.rim();
           }
         }
-      }
 
-      // Reset when ball falls off bottom of screen
-      if (b.y > this.H + 80) {
-        if (!b.scored) {
-          // Miss resets the streak
-          if (this.streak > 0) {
-            this.streak = 0;
-            if (this.onFire) {
-              this.onFire = false;
-              this.status(`Streak lost!`);
+        // Rim & Basket detection (at hoop depth z ~= 0.82 to 1.25)
+        if (b.z >= 0.82 && b.z <= 1.25) {
+          const dxFromCenter = b.x - this.hoop.x;
+          const dyFromRim = b.y - rimY;
+
+          // 1. Basket score detection (evaluated FIRST so valid shots are never rejected by rim edge)
+          if (!b.scored && b.vy > 30 && Math.abs(dxFromCenter) < rimW * 0.46 && dyFromRim >= -16 && dyFromRim <= 32) {
+            b.scored = true;
+            b.vx = (this.hoop.x - b.x) * 3;
+            b.vy = Math.min(b.vy, 280);
+            this.scoreBasket();
+          }
+
+          // 2. Rim collision (evaluated only if ball has not already scored)
+          if (!b.scored && b.z >= 0.85 && b.z <= 1.18) {
+            const effectiveR = this.ballRadius * (1 - b.z * 0.45) * 0.62 + 5;
+            const dLeft = U.dist(b.x, b.y, leftRimX, rimY);
+            const dRight = U.dist(b.x, b.y, rightRimX, rimY);
+
+            if (dLeft < effectiveR) {
+              const nx = (b.x - leftRimX) / (dLeft || 1);
+              b.vx = nx * 140 - 45;
+              b.vy = -Math.abs(b.vy) * 0.52 - 30;
+              b.hitRim = true;
+              n.vSwayX -= 40;
+              Sound.rim();
+            } else if (dRight < effectiveR) {
+              const nx = (b.x - rightRimX) / (dRight || 1);
+              b.vx = nx * 140 + 45;
+              b.vy = -Math.abs(b.vy) * 0.52 - 30;
+              b.hitRim = true;
+              n.vSwayX += 40;
+              Sound.rim();
             }
           }
         }
-        this.spawnBall();
-      }
+
+        // Reset streak on miss when ball falls off bottom
+        if (b.y > this.H + 80) {
+          if (!b.scored) {
+            if (this.streak > 0) {
+              this.streak = 0;
+              if (this.onFire) {
+                this.onFire = false;
+                this.status(`Streak lost!`);
+              }
+            }
+          }
+          return false; // remove ball
+        }
+
+        return true; // keep ball in flight
+      });
     }
 
     scoreBasket() {
@@ -351,9 +374,16 @@
         this.banner(pts > 1 ? '+2 PTS!' : '+1 PT!', { color: '#ffd166', dur: 0.8, size: 36 });
       }
 
+      this.updateHUD();
+    }
+
+    updateHUD() {
       this.hud({
         score0: this.scores[0],
-        score1: this.scores[1]
+        score1: this.scores[1],
+        p0sub: this.round === 0 ? `${Math.ceil(this.timeLeft)}s` : `${this.scores[0]} pts`,
+        p1sub: this.round === 1 ? `${Math.ceil(this.timeLeft)}s` : `${this.scores[1]} pts`,
+        turn: this.turn
       });
     }
 
@@ -429,43 +459,47 @@
       // 2. Backboard & rear rim arc
       this.renderBackboardAndRearRim(c);
 
-      // 3. Rear half of 3D net (behind the ball)
+      // 3. Rear half of 3D net (behind balls)
       this.renderNetMesh(c, false);
 
-      // 4. Ball Fire Trail (behind ball)
-      if (this.onFire && this.trail.length > 1) {
-        for (let i = 1; i < this.trail.length; i++) {
-          const t0 = this.trail[i - 1];
-          const t1 = this.trail[i];
-          const k = 1 - t1.t / 0.28;
-          const r = this.ballRadius * (1 - t1.z * 0.45) * k;
-
-          c.fillStyle = U.alpha('#ff9f43', k * 0.4);
-          U.circle(c, t1.x, t1.y, r * 1.3); c.fill();
-          c.fillStyle = U.alpha('#ffd166', k * 0.6);
-          U.circle(c, t1.x, t1.y, r * 0.8); c.fill();
+      // 4. In-flight Basketballs & trails
+      for (const b of this.inFlightBalls) {
+        if (this.onFire && b.trail.length > 1) {
+          for (let i = 1; i < b.trail.length; i++) {
+            const t1 = b.trail[i];
+            const k = 1 - t1.t / 0.28;
+            const r = this.ballRadius * (1 - t1.z * 0.45) * k;
+            c.fillStyle = U.alpha('#ff9f43', k * 0.4);
+            U.circle(c, t1.x, t1.y, r * 1.3); c.fill();
+            c.fillStyle = U.alpha('#ffd166', k * 0.6);
+            U.circle(c, t1.x, t1.y, r * 0.8); c.fill();
+          }
         }
+        this.renderBall(c, b);
       }
 
-      // 5. Basketball (drawn inside the hoop volume)
-      if (this.ball) {
-        this.renderBall(c);
-      }
-
-      // 6. Front half of 3D net (cradles and covers ball in front)
+      // 5. Front half of 3D net (cradles and covers ball in front)
       this.renderNetMesh(c, true);
 
-      // 7. Front half of metallic orange rim
+      // 6. Front half of metallic orange rim
       this.renderFrontRim(c);
 
+      // 7. Ready Ball at bottom (spawn rack)
+      if (this.readyBall && !this.cpuTurn) {
+        this.renderBall(c, { x: this.readyBall.x, y: this.readyBall.y, z: 0, rot: this.readyBall.rot });
+      }
+
       // 8. Streak / Clock HUD on-court banner
-      c.fillStyle = 'rgba(0,0,0,0.35)';
-      U.rr(c, this.W / 2 - 70, 20, 140, 36, 18);
+      c.fillStyle = 'rgba(0,0,0,0.40)';
+      U.rr(c, this.W / 2 - 75, 20, 150, 38, 19);
       c.fill();
-      U.text(c, `⏱ ${Math.ceil(this.timeLeft)}s`, this.W / 2, 38, { size: 18, color: this.timeLeft < 6 ? '#ff5d6c' : '#ffd166', weight: 900 });
+      c.strokeStyle = 'rgba(255,255,255,0.15)';
+      c.lineWidth = 1;
+      c.stroke();
+      U.text(c, `⏱ ${Math.ceil(this.timeLeft)}s`, this.W / 2, 39, { size: 19, color: this.timeLeft < 10 ? '#ff5d6c' : '#ffd166', weight: 900 });
 
       if (this.streak >= 2) {
-        U.text(c, `${this.streak} IN A ROW!`, this.W / 2, 70, { size: 14, color: this.onFire ? '#ff5d6c' : '#ff9f43', weight: 900 });
+        U.text(c, `${this.streak} IN A ROW!`, this.W / 2, 72, { size: 14, color: this.onFire ? '#ff5d6c' : '#ff9f43', weight: 900 });
       }
     }
 
@@ -474,14 +508,14 @@
       const hy = this.hoop.y;
       const hw = this.hoop.width;
 
-      // Backboard (acrylic transparent style with white borders & red target square)
-      const bw = 140, bh = 95;
-      const bx = hx - bw / 2, by = hy - bh + 12;
+      // Backboard (GamePigeon acrylic transparent style with white borders & red target square)
+      const bw = 145, bh = 98;
+      const bx = hx - bw / 2, by = hy - bh + 14;
 
       c.save();
       c.shadowColor = 'rgba(0,0,0,0.55)';
       c.shadowBlur = 16;
-      c.fillStyle = 'rgba(255,255,255,0.78)';
+      c.fillStyle = 'rgba(255,255,255,0.82)';
       U.rr(c, bx, by, bw, bh, 8);
       c.fill();
       c.strokeStyle = '#e03131';
@@ -582,7 +616,6 @@
       const hy = this.hoop.y;
       const hw = this.hoop.width;
 
-      // Front half of orange metal rim with 3D highlight (renders on top of ball & front net)
       c.save();
       c.strokeStyle = '#ff6b00';
       c.lineWidth = 5;
@@ -599,15 +632,13 @@
       c.restore();
     }
 
-    renderBall(c) {
-      const b = this.ball;
-      // Perspective scale based on z (1.0 at hoop, 0 at hand)
-      const scale = 1 - b.z * 0.48;
+    renderBall(c, b) {
+      const scale = 1 - (b.z || 0) * 0.48;
       const r = Math.max(12, this.ballRadius * scale);
 
       c.save();
       c.translate(b.x, b.y);
-      c.rotate(b.rot);
+      c.rotate(b.rot || 0);
 
       // On Fire aura
       if (this.onFire) {
@@ -617,7 +648,7 @@
         U.circle(c, 0, 0, r * 1.15); c.fill();
       }
 
-      // Ball sphere gradient (orange rubber)
+      // Ball sphere gradient (GamePigeon vibrant orange rubber)
       U.ball(c, 0, 0, r, '#e8590c', { light: '#ffa94d', dark: '#a63300' });
 
       // Black seam ribs
@@ -639,13 +670,14 @@
     category: 'Sports',
     tag: 'Arcade Swish',
     icon: A.ICONS.basketball,
-    desc: 'Flick shots into the basket in 30 seconds. Streak 3 to catch fire and score moving hoop bonus points!',
+    desc: 'Rapid-fire flick shots into the basket in 60 seconds. Streak 3 to catch fire and score moving hoop bonus points!',
     rules: [
       'Swipe upward on the ball to flick your shot toward the hoop.',
-      'You have 30 seconds to score as many points as possible.',
-      'Sink 3 shots in a row without missing to catch FIRE! Fire balls award 2X points.',
-      'Score 10+ points to test your timing against a moving hoop.',
-      'Take turns in 2-player pass & play or challenge the CPU.'
+      'Rapid fire! Another ball is ready immediately so you can shoot ball after ball without waiting.',
+      'You have 60 seconds to score as many points as possible.',
+      'Sink 3 shots in a row to catch FIRE! Fire balls award 2X points.',
+      'At 30 seconds left or 10+ points, test your timing against a moving hoop.',
+      'Challenge the CPU or take turns in 2-player pass & play.'
     ],
     create: (stage, opts) => new BasketballGame(stage, opts)
   });

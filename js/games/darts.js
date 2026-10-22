@@ -239,6 +239,28 @@
       }
     }
 
+    skipCpu() {
+      if (!this.cpuTurn || this.over) return;
+      while (this.dartsLeft > 0 && !this.over) {
+        const skill = this.cpuSkill(0.55, 0.78, 0.94);
+        const pts = skill > 0.9 ? U.pick([20, 40, 60]) : skill > 0.7 ? U.pick([15, 20, 25]) : U.pick([5, 10, 15, 20]);
+        if (this.scores[1] - pts >= 0) {
+          this.scores[1] -= pts;
+          if (this.scores[1] === 0) {
+            this.finish({
+              winner: 1,
+              title: `${this.playerName(1)} wins!`,
+              text: `Hit exactly 0!`
+            });
+            return;
+          }
+        }
+        this.dartsLeft--;
+      }
+      this.inFlight = null;
+      this.endTurn();
+    }
+
     updateHUD() {
       this.hud({
         score0: this.scores[0],

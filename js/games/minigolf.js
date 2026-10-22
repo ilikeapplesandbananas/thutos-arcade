@@ -283,6 +283,21 @@
       });
     }
 
+    skipCpu() {
+      if (!this.cpuTurn || this.over || this.ball.inHole) return;
+      this._cpuPuttPending = false;
+      this.moving = false;
+      this.ball.vx = 0;
+      this.ball.vy = 0;
+      // Add a stroke if not already sunk, place ball at cup and sink
+      if (!this.ball.inHole && !this.ball.sinking) {
+        this.strokes[this.turn]++;
+        this.totalScores[this.turn]++;
+        this.updateHUD();
+      }
+      this.sinkHole(false);
+    }
+
     /* ---------- Physics Loop ---------- */
     update(dt) {
       // Sinking spiral animation into cup with 3D lip roll
@@ -349,11 +364,6 @@
             this.totalScores[this.turn]++;
             this.resetBallToStart();
             this.updateHUD();
-
-            if (this.strokes[this.turn] >= 7) {
-              this.sinkHole(true);
-              return;
-            }
 
             if (this.cpuTurn) {
               this.wait(900, () => this.cpuPutt());
@@ -480,12 +490,6 @@
     }
 
     switchTurnOrContinue() {
-      // Stroke cap check (max 7 strokes per hole)
-      if (this.strokes[this.turn] >= 7) {
-        this.sinkHole(true);
-        return;
-      }
-
       if (this.cpuTurn) {
         this.cpuPutt();
       }

@@ -70,7 +70,23 @@
         status: `${this.playerName(this.turn)}: Drag to aim, pull cue to shoot`
       });
       if (this.cpuTurn) {
-        this.wait(800, () => this.cpuShoot());
+        this.wait(800, () => this.cpuTakeShot());
+      }
+    }
+
+    cpuShoot() {
+      return this.cpuTakeShot();
+    }
+
+    skipCpu() {
+      if (!this.cpuTurn || this.over) return;
+      if (!this.moving) {
+        this.cpuTakeShot();
+      }
+      let guard = 0;
+      while (this.moving && guard < 600) {
+        this.update(0.05);
+        guard++;
       }
     }
 
@@ -257,6 +273,17 @@
 
     /* ---------- Physics Loop ---------- */
     update(dt) {
+      // CPU Watchdog: ensures CPU never freezes
+      if (this.cpuTurn && !this.moving && !this.over && !this.ballInHand) {
+        this.cpuIdleTimer = (this.cpuIdleTimer || 0) + dt;
+        if (this.cpuIdleTimer > 1.8) {
+          this.cpuIdleTimer = 0;
+          this.cpuTakeShot();
+        }
+      } else {
+        this.cpuIdleTimer = 0;
+      }
+
       if (!this.moving) return;
 
       const subSteps = 8;
@@ -283,32 +310,44 @@
           let nearPocket = false;
           for (const p of this.pockets) {
             const dist = U.dist(b.x, b.y, p.x, p.y);
-            if (dist < p.r * 1.30) {
+            if (dist < p.r * 1.35) {
               if (!b.sinking && !b.sunk) {
                 this.pocketBall(b, p);
               }
               nearPocket = true;
               break;
-            } else if (dist < p.r * 2.3) {
+            } else if (dist < p.r * 2.5) {
               nearPocket = true;
               // Pocket mouth suction funnels the ball smoothly into the cup
-              const pull = (p.r * 2.3 - dist) * 26 * sdt;
+              const pull = (p.r * 2.5 - dist) * 28 * sdt;
               b.vx += ((p.x - b.x) / dist) * pull;
               b.vy += ((p.y - b.y) / dist) * pull;
             }
           }
           if (b.sunk || b.sinking) continue;
 
-          // Cushion bounds (only when not entering a pocket opening)
-          if (!nearPocket) {
-            let hitRail = false;
+          // Cushion bounds with open gaps at all 6 pocket mouths
+          const ym = this.ty + this.th / 2;
+          const cornerGap = 36;
+          const sideGap = 24;
+
+          const inTopCushionX = b.x >= this.tx + cornerGap && b.x <= this.tx + this.tw - cornerGap;
+          const inBtmCushionX = b.x >= this.tx + cornerGap && b.x <= this.tx + this.tw - cornerGap;
+          const inSideCushionY = (b.y >= this.ty + cornerGap && b.y <= ym - sideGap) || (b.y >= ym + sideGap && b.y <= this.ty + this.th - cornerGap);
+
+          let hitRail = false;
+          if (inSideCushionY) {
             if (b.x < this.minX) { b.x = this.minX; b.vx = -b.vx * 0.82; hitRail = true; }
             if (b.x > this.maxX) { b.x = this.maxX; b.vx = -b.vx * 0.82; hitRail = true; }
-            if (b.y < this.minY) { b.y = this.minY; b.vy = -b.vy * 0.82; hitRail = true; }
-            if (b.y > this.maxY) { b.y = this.maxY; b.vy = -b.vy * 0.82; hitRail = true; }
-            if (hitRail && Math.hypot(b.vx, b.vy) > 30) {
-              Sound.thud(Math.hypot(b.vx, b.vy) / 600);
-            }
+          }
+          if (inTopCushionX && b.y < this.minY) {
+            b.y = this.minY; b.vy = -b.vy * 0.82; hitRail = true;
+          }
+          if (inBtmCushionX && b.y > this.maxY) {
+            b.y = this.maxY; b.vy = -b.vy * 0.82; hitRail = true;
+          }
+          if (hitRail && Math.hypot(b.vx, b.vy) > 30) {
+            Sound.thud(Math.hypot(b.vx, b.vy) / 600);
           }
         }
 
@@ -393,8 +432,8 @@
         t: 0,
         dur: 0.40
       };
-      b.vx = (p.x - b.x) * 2;
-      b.vy = (p.y - b.y) * 2;
+      b.vx = 0;
+      b.vy = 0;
       Sound.pocket();
       this.fx.burst(p.x, p.y, 14, { color: '#ffd166', speed: 90, life: 0.5 });
 
@@ -1067,26 +1106,5 @@
       'Scratch or failing to hit the lowest ball first gives opponent ball-in-hand.'
     ],
     create: (stage, opts) => new PoolGame(stage, Object.assign({}, opts, { variant: '9ball', gameId: '9ball' }))
-  });
-
-  // Legacy alias
-  A.register({
-    id: 'pool',
-    name: '8 Ball / 9 Ball',
-    category: 'Pool',
-    tag: 'Classic Billiards',
-    icon: A.ICONS.pool,
-    desc: 'Call solids or stripes, control shot power, and pocket the 8-ball to win.',
-    variants: [
-      { id: '8ball', name: '8 Ball' },
-      { id: '9ball', name: '9 Ball' }
-    ],
-    rules: [
-      'Drag to aim your cue stick; use the left power bar to pull back and shoot.',
-      '8 Ball: first player to pocket a ball claims Solids (1-7) or Stripes (9-15). Clear your group before pocketing the 8-ball.',
-      '9 Ball: always strike the lowest numbered ball first. Whoever pockets the 9-ball wins.',
-      'Scratch or foul gives your opponent ball-in-hand to place anywhere!'
-    ],
-    create: (stage, opts) => new PoolGame(stage, opts)
   });
 })(window.Arcade);

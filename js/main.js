@@ -221,6 +221,12 @@
         if (state.turn != null) {
           $('pl0').classList.toggle('turn', state.turn === 0);
           $('pl1').classList.toggle('turn', state.turn === 1);
+
+          // Skip CPU button: ONLY visible when playing vs CPU and it is CPU's turn!
+          const skipBtn = $('cpuSkipBtn');
+          if (skipBtn) {
+            skipBtn.style.display = (mode === 'cpu' && state.turn === 1) ? 'inline-flex' : 'none';
+          }
         }
       },
       handoff: (playerIdx, title, text) => {
@@ -241,6 +247,9 @@
         });
       },
       end: result => {
+        const skipBtn = $('cpuSkipBtn');
+        if (skipBtn) skipBtn.style.display = 'none';
+
         $('resultTitle').textContent = result.title;
         $('resultText').textContent = result.text;
 
@@ -315,8 +324,9 @@
       }
     };
 
-    // Shuffle who plays first when playing against CPU!
-    const firstTurn = mode === 'cpu' ? (Math.random() < 0.5 ? 0 : 1) : 0;
+    // Word games rule: human player ALWAYS plays first so CPU words don't give an unfair advantage!
+    const isWordGame = ['wordhunt', 'wordbites', 'anagrams'].includes(activeGameDef.id);
+    const firstTurn = isWordGame ? 0 : (mode === 'cpu' ? (Math.random() < 0.5 ? 0 : 1) : 0);
 
     activeGameInstance = activeGameDef.create(stage, {
       mode,
@@ -336,6 +346,8 @@
       activeGameInstance = null;
     }
     renderGrid();
+    const skipBtn = $('cpuSkipBtn');
+    if (skipBtn) skipBtn.style.display = 'none';
     $('gameScreen').classList.remove('open');
     $('gameScreen').setAttribute('aria-hidden', 'true');
     $('setup').classList.remove('open');
@@ -394,6 +406,13 @@
 
     // Game bar back button
     $('backBtn').addEventListener('click', quitToLobby);
+
+    // Skip CPU turn button
+    $('cpuSkipBtn').addEventListener('click', () => {
+      if (activeGameInstance && typeof activeGameInstance.skipCpu === 'function') {
+        activeGameInstance.skipCpu();
+      }
+    });
 
     // Help modal
     $('helpBtn').addEventListener('click', () => {

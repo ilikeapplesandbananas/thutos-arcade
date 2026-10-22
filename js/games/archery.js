@@ -49,9 +49,12 @@
     }
 
     rollWind() {
-      // Shifting wind on every shot: non-zero crosswinds (-4 to +4)
-      const speeds = [-4, -3, -2, -1, 1, 2, 3, 4];
-      this.wind = U.pick(speeds);
+      // 360-degree wind in any direction!
+      this.windAngle = Math.random() * Math.PI * 2;
+      this.windSpeed = U.rand(1.2, 5.0);
+      this.windX = Math.cos(this.windAngle) * this.windSpeed;
+      this.windY = Math.sin(this.windAngle) * this.windSpeed;
+      this.wind = Math.round(this.windSpeed);
       this.rollClothes();
     }
 
@@ -97,13 +100,13 @@
       Sound.whoosh();
       const rData = ROUNDS[this.currentRound];
 
-      // Calculate wind drift in pixels
-      // In GamePigeon: wind drift = wind * multiplier * ring_width (~13px per ring)
+      // Calculate 360-degree wind drift in pixels (both X and Y)
       const ringWidth = (this.target.r * rData.targetScale) / 10;
-      const windDrift = this.wind * rData.mult * ringWidth;
+      const driftX = (this.windX || 0) * rData.mult * ringWidth;
+      const driftY = (this.windY || 0) * rData.mult * ringWidth;
 
-      const hitX = aimX + windDrift + U.gauss() * 2.5;
-      const hitY = aimY + U.gauss() * 2.5;
+      const hitX = aimX + driftX + U.gauss() * 2.0;
+      const hitY = aimY + driftY + U.gauss() * 2.0;
 
       this.inFlight = {
         startX: this.W / 2,
@@ -123,36 +126,63 @@
         if (!this.cpuTurn || this.over) return;
         const rData = ROUNDS[this.currentRound];
         const ringWidth = (this.target.r * rData.targetScale) / 10;
-        const windDrift = this.wind * rData.mult * ringWidth;
+        const driftX = (this.windX || 0) * rData.mult * ringWidth;
+        const driftY = (this.windY || 0) * rData.mult * ringWidth;
 
-        // Pro CPU counter-aims against the wind!
+        // Pro CPU counter-aims against both X and Y wind drift!
         const skill = this.cpuSkill(0.65, 0.82, 0.95);
-        let aimX = this.target.x - windDrift * skill;
-        let aimY = this.target.y;
+        let aimX = this.target.x - driftX * skill;
+        let aimY = this.target.y - driftY * skill;
 
         if (Math.random() > skill) {
-          aimX += U.gauss() * 32;
-          aimY += U.gauss() * 32;
+          aimX += U.gauss() * 28;
+          aimY += U.gauss() * 28;
         }
 
         this.releaseArrow(aimX, aimY);
       });
     }
 
+    skipCpu() {
+      if (!this.cpuTurn || this.over) return;
+      const rData = ROUNDS[this.currentRound];
+      const ringWidth = (this.target.r * rData.targetScale) / 10;
+      const skill = this.cpuSkill(0.65, 0.82, 0.95);
+
+      while (this.arrowsLeft > 0 && !this.over) {
+        const ring = skill > 0.9 ? U.rand(8, 10) : skill > 0.75 ? U.rand(6, 9) : U.rand(4, 8);
+        const pts = Math.round(ring);
+        this.scores[1] += pts;
+        const ang = Math.random() * Math.PI * 2;
+        const dist = (10 - pts) * ringWidth + U.rand(0, ringWidth * 0.8);
+        this.arrowsOnBoard.push({
+          x: this.target.x + Math.cos(ang) * dist,
+          y: this.target.y + Math.sin(ang) * dist,
+          pts
+        });
+        this.arrowsLeft--;
+      }
+      this.inFlight = null;
+      this.updateHUD();
+      this.endTurn();
+    }
+
     /* ---------- Animation & Scoring ---------- */
     update(dt) {
       this.animTime += dt;
 
-      // Update blowing leaves based on wind
+      // Update blowing leaves based on 360-degree wind
       if (this.leaves) {
-        const windSpeed = this.wind * 55;
+        const driftX = (this.windX || 0) * 45;
+        const driftY = (this.windY || 0) * 35;
         for (const l of this.leaves) {
-          l.x += (windSpeed + (this.wind >= 0 ? l.speed : -l.speed)) * dt;
-          l.y += Math.sin(this.animTime * 3 + l.rot) * 16 * dt + 14 * dt;
+          l.x += (driftX + l.speed * 0.4) * dt;
+          l.y += (driftY + 20) * dt;
           l.rot += l.vrot * dt;
           if (l.x > this.W + 20) l.x = -20;
           if (l.x < -20) l.x = this.W + 20;
-          if (l.y > this.H) l.y = 100;
+          if (l.y > this.H + 20) l.y = 80;
+          if (l.y < 80) l.y = this.H + 20;
         }
       }
 
@@ -528,19 +558,37 @@
     }
 
     renderWindWidget(c) {
-      const wx = this.W - 65, wy = 45;
-      c.fillStyle = 'rgba(0,0,0,0.45)';
-      U.rr(c, wx - 45, wy - 22, 90, 44, 14);
+      const wx = this.W - 65, wy = 46;
+      c.fillStyle = 'rgba(0,0,0,0.55)';
+      U.rr(c, wx - 48, wy - 24, 96, 48, 14);
+      c.fill();
+      c.strokeStyle = 'rgba(255,255,255,0.15)';
+      c.lineWidth = 1;
+      c.stroke();
+
+      U.text(c, 'WIND', wx, wy - 11, { size: 9.5, color: '#a9a3d1', weight: 900 });
+
+      // Compass rose with rotating arrow pointing in wind direction
+      const cx = wx - 26, cy = wy + 8;
+      c.fillStyle = 'rgba(255,255,255,0.12)';
+      U.circle(c, cx, cy, 11);
       c.fill();
 
-      U.text(c, 'WIND', wx, wy - 9, { size: 10, color: '#a9a3d1', weight: 900 });
+      c.save();
+      c.translate(cx, cy);
+      c.rotate(this.windAngle != null ? this.windAngle : 0);
+      c.fillStyle = '#ffd166';
+      c.beginPath();
+      c.moveTo(8, 0);
+      c.lineTo(-5, -4.5);
+      c.lineTo(-2, 0);
+      c.lineTo(-5, 4.5);
+      c.closePath();
+      c.fill();
+      c.restore();
 
-      if (this.wind === 0) {
-        U.text(c, 'CALM', wx, wy + 10, { size: 14, color: '#3ee0b0', weight: 900 });
-      } else {
-        const arrow = this.wind > 0 ? '▶' : '◀';
-        U.text(c, `${arrow} ${Math.abs(this.wind)} MPH`, wx, wy + 10, { size: 13, color: '#ffd166', weight: 900 });
-      }
+      const speedVal = (this.windSpeed || 0).toFixed(1);
+      U.text(c, `${speedVal} MPH`, wx + 13, wy + 8, { size: 12.5, color: '#ffd166', weight: 900 });
     }
   }
 

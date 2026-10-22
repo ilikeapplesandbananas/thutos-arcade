@@ -236,10 +236,12 @@
       });
       const targets = sorted.slice(0, cpuCount);
 
-      let idx = 0;
+      this._cpuTargets = targets;
+      this._cpuIdx = 0;
+
       const solveNext = () => {
-        if (!this.activeRound || !this.cpuTurn || idx >= targets.length) return;
-        const w = targets[idx++];
+        if (!this.activeRound || !this.cpuTurn || this._cpuIdx >= this._cpuTargets.length) return;
+        const w = this._cpuTargets[this._cpuIdx++];
         const pts = Words.anagramScore(w.length);
         this.scores[1] += pts;
         this.foundWords[1].add(w);
@@ -248,11 +250,27 @@
         this.banner(`+${pts} (${w.toUpperCase()})`, { color: '#ff5d6c', dur: 0.8, size: 26 });
         this.updateHUD();
 
-        const delay = this.cpuSkill(U.rand(2800, 3900), U.rand(1800, 2600), U.rand(1100, 1800));
+        const delay = this.cpuSkill(U.rand(2400, 3400), U.rand(1400, 2200), U.rand(800, 1400));
         this.wait(delay, solveNext);
       };
 
-      this.wait(1500, solveNext);
+      this.wait(1200, solveNext);
+    }
+
+    skipCpu() {
+      if (!this.activeRound || !this.cpuTurn) return;
+      if (this._cpuTargets) {
+        while (this._cpuIdx < this._cpuTargets.length) {
+          const w = this._cpuTargets[this._cpuIdx++];
+          const pts = Words.anagramScore(w.length);
+          this.scores[1] += pts;
+          this.foundWords[1].add(w);
+        }
+      }
+      this.timeLeft = 0;
+      this.activeRound = false;
+      this.updateHUD();
+      this.endRound();
     }
 
     /* ---------- Timer & Round Loop ---------- */
