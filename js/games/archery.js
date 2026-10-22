@@ -111,10 +111,14 @@
       this.inFlight = {
         startX: this.W / 2,
         startY: this.H - 80,
+        aimX: aimX,
+        aimY: aimY,
+        driftX: driftX,
+        driftY: driftY,
         endX: hitX,
         endY: hitY,
         t: 0,
-        dur: 0.38
+        dur: 0.44
       };
     }
 
@@ -500,15 +504,36 @@
         c.restore();
       }
 
-      // 4. Arrow In Flight
+      // 4. Arrow In Flight with dynamic 360-degree aerodynamic wind drift and banking
       if (this.inFlight) {
-        const k = this.inFlight.t / this.inFlight.dur;
-        const curX = U.lerp(this.inFlight.startX, this.inFlight.endX, k);
-        const curY = U.lerp(this.inFlight.startY, this.inFlight.endY, k) - Math.sin(k * Math.PI) * 55;
-        const arrowScale = U.lerp(1.4, 0.45, k);
+        const inf = this.inFlight;
+        const k = Math.min(1, inf.t / inf.dur);
+
+        const getPos = prog => {
+          const aimX = inf.aimX != null ? inf.aimX : inf.endX;
+          const aimY = inf.aimY != null ? inf.aimY : inf.endY;
+          const baseX = U.lerp(inf.startX, aimX, prog);
+          const baseY = U.lerp(inf.startY, aimY, prog) - Math.sin(prog * Math.PI) * 55;
+          const driftX = inf.driftX || 0;
+          const driftY = inf.driftY || 0;
+          // Quadratic wind displacement: distance = 1/2 * a * t^2
+          const driftProg = prog * prog;
+          return {
+            x: baseX + driftX * driftProg,
+            y: baseY + driftY * driftProg
+          };
+        };
+
+        const cur = getPos(k);
+        const next = getPos(Math.min(1, k + 0.025));
+        const vx = next.x - cur.x;
+        const vy = next.y - cur.y;
+        const bankAngle = Math.atan2(vy, vx) + Math.PI / 2;
+        const arrowScale = U.lerp(1.35, 0.45, k);
 
         c.save();
-        c.translate(curX, curY);
+        c.translate(cur.x, cur.y);
+        c.rotate(bankAngle);
         c.scale(arrowScale, arrowScale);
 
         // Wooden arrow shaft

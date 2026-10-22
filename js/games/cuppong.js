@@ -178,9 +178,9 @@
       const spdY = Math.abs(dy) / Math.max(0.08, dt);
       const spdX = dx / Math.max(0.08, dt);
 
-      this.ball.vx = U.clamp(spdX * 0.65, -260, 260);
-      this.ball.vy = -U.clamp(spdY * 0.72, 440, 780);
-      this.ball.vz = U.clamp(spdY * 0.0017, 1.1, 1.5);
+      this.ball.vx = U.clamp(spdX * 0.65, -320, 320);
+      this.ball.vy = -U.clamp(spdY * 0.72, 450, 1050);
+      this.ball.vz = U.clamp(spdY * 0.0017, 1.0, 1.55);
 
       Sound.whoosh();
     }
@@ -194,24 +194,38 @@
 
       this.wait(900, () => {
         if (!this.cpuTurn || this.over) return;
-        const accuracy = this.cpuSkill(0.42, 0.72, 0.94);
+        const accuracy = this.cpuSkill(0.50, 0.80, 0.96);
 
+        // Pick smart target cup (front-most or corner)
         let target;
-        if (accuracy > 0.9) {
-          target = targetCups.slice().sort((a, b) => Math.abs(b.x - this.W / 2) - Math.abs(a.x - this.W / 2))[0] || U.pick(targetCups);
+        if (accuracy > 0.85) {
+          target = targetCups.slice().sort((a, b) => b.y - a.y)[0] || U.pick(targetCups);
         } else {
           target = U.pick(targetCups);
         }
 
         let tx = target.x, ty = target.y;
         if (Math.random() > accuracy) {
-          tx += U.gauss() * (1 - accuracy) * 75;
-          ty += U.gauss() * (1 - accuracy) * 85;
+          tx += U.gauss() * (1 - accuracy) * 45;
+          ty += U.gauss() * (1 - accuracy) * 40;
         }
 
-        const dx = (tx - this.ball.x) * 1.1;
-        const dy = (ty - this.ball.y) * 0.8;
-        this.throwBall(dx, dy, 0.2);
+        // Ballistic parabolic trajectory calculation:
+        // g = 1150, start = (210, 640), target = (tx, ty)
+        const g = 1150;
+        const apexY = ty - 42;
+        const hUp = Math.max(80, this.ball.y - apexY);
+        const vy0 = -Math.sqrt(2 * g * hUp);
+        const t1 = Math.abs(vy0) / g;
+        const t2 = Math.sqrt(Math.max(0, 2 * (ty - apexY) / g));
+        const T = Math.max(0.3, t1 + t2);
+        const vx0 = (tx - this.ball.x) / T;
+
+        this.ball.inAir = true;
+        this.ball.vx = U.clamp(vx0, -320, 320);
+        this.ball.vy = U.clamp(vy0, -1050, -450);
+        this.ball.vz = 1.35;
+        Sound.whoosh();
       });
     }
 
@@ -284,7 +298,7 @@
           const dist = U.dist(b.x, b.y, cup.x, cup.y);
 
           // Direct swish or bounce into cup opening
-          if (dist < cup.r * 0.92) {
+          if (dist < cup.r * 1.05) {
             this.handleSink(cup);
             return;
           }

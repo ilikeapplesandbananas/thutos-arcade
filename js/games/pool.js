@@ -60,6 +60,7 @@
       this.firstContact = null;
       this.pocketedThisShot = [];
       this.scratch = false;
+      this.isBreakShot = true;
 
       this.rackBalls();
       this.hud({
@@ -72,6 +73,17 @@
       if (this.cpuTurn) {
         this.wait(800, () => this.cpuTakeShot());
       }
+    }
+
+    resetCueBall(x, y) {
+      this.cueBall.x = x != null ? x : (this.tx + this.tw / 2);
+      this.cueBall.y = y != null ? y : (this.ty + this.th * 0.72);
+      this.cueBall.vx = 0;
+      this.cueBall.vy = 0;
+      this.cueBall.scale = 1.0;
+      this.cueBall.alpha = 1.0;
+      this.cueBall.sunk = false;
+      this.cueBall.sinking = null;
     }
 
     cpuShoot() {
@@ -180,12 +192,7 @@
           // Check collision with other balls
           const overlap = this.balls.some(b => !b.sunk && b.id !== 0 && U.dist(p.x, p.y, b.x, b.y) < this.r * 2.2);
           if (!overlap) {
-            this.cueBall.x = p.x;
-            this.cueBall.y = p.y;
-            this.cueBall.sunk = false;
-            this.cueBall.sinking = null;
-            this.cueBall.vx = 0;
-            this.cueBall.vy = 0;
+            this.resetCueBall(p.x, p.y);
             this.ballInHand = false;
             this.status(`${this.playerName(this.turn)}: Ball placed. Aim and shoot!`);
             Sound.tap();
@@ -194,25 +201,14 @@
         return;
       }
 
-      // Left power slider hit (x: 5 to 52)
-      if (p.x < 52) {
+      // Left power slider hit (x: 5 to 58)
+      if (p.x < 58) {
         this.draggingPower = true;
         this.updatePower(p.y);
         return;
       }
 
-      // Cue stick pull-back touch (near cue stick or pulling back from cue ball)
-      const oppAngle = this.aimAngle + Math.PI;
-      const dX = p.x - this.cueBall.x;
-      const dY = p.y - this.cueBall.y;
-      const projAlongCue = Math.cos(oppAngle) * dX + Math.sin(oppAngle) * dY;
-      const distFromCueBall = Math.hypot(dX, dY);
-      if (distFromCueBall < 65 || (projAlongCue > 10 && projAlongCue < 220 && Math.abs(-Math.sin(oppAngle) * dX + Math.cos(oppAngle) * dY) < 45)) {
-        this.draggingCueStick = true;
-        return;
-      }
-
-      // Dragging cue or aiming anywhere else on table
+      // Touching anywhere else on the table freely aims the stick without triggering the pull bar!
       this.draggingAim = true;
       this.updateAim(p);
     }
@@ -221,23 +217,16 @@
       if (this.moving || this.over || this.cpuTurn) return;
       if (this.draggingPower) {
         this.updatePower(p.y);
-      } else if (this.draggingCueStick) {
-        const oppAngle = this.aimAngle + Math.PI;
-        const dX = p.x - this.cueBall.x;
-        const dY = p.y - this.cueBall.y;
-        const pullDist = Math.max(0, Math.cos(oppAngle) * dX + Math.sin(oppAngle) * dY);
-        this.power = U.clamp(pullDist / 120, 0, 1);
       } else if (this.draggingAim) {
         this.updateAim(p);
       }
     }
 
     onUp() {
-      if ((this.draggingPower || this.draggingCueStick) && this.power > 0.05) {
+      if (this.draggingPower && this.power > 0.05) {
         this.shoot(this.power);
       }
       this.draggingPower = false;
-      this.draggingCueStick = false;
       this.draggingAim = false;
       this.power = 0;
     }
@@ -251,7 +240,7 @@
     updateAim(p) {
       const dx = p.x - this.cueBall.x;
       const dy = p.y - this.cueBall.y;
-      if (Math.hypot(dx, dy) > 10) {
+      if (Math.hypot(dx, dy) > 8) {
         this.aimAngle = Math.atan2(dy, dx);
       }
     }
@@ -264,8 +253,16 @@
       this.pocketedThisShot = [];
       this.scratch = false;
 
+      // Snapshot pre-shot state for accurate foul rules and group detection
+      this._lowestBeforeShot = this.lowestBallOnTable();
+      this._groupsBeforeShot = [this.groups[0], this.groups[1]];
+      const curGroup = this.groups[this.turn];
+      this._ownRemainingBeforeShot = curGroup
+        ? this.balls.filter(b => !b.sunk && b.type === curGroup).length
+        : 0;
+
       // Realistic speed curve fitting chosen pull bar effort
-      const speed = U.lerp(150, 1250, Math.pow(power, 1.15));
+      const speed = U.lerp(180, 1350, Math.pow(power, 1.15));
       this.cueBall.vx = Math.cos(this.aimAngle) * speed;
       this.cueBall.vy = Math.sin(this.aimAngle) * speed;
       Sound.cue(power);
@@ -306,22 +303,21 @@
             b.vy = 0;
           }
 
-          // Check pocket drops and funnel suction
-          let nearPocket = false;
+          // 3D ball roll rotation tracking
+          const bspd = Math.hypot(b.vx, b.vy);
+          if (bspd > 0.5) {
+            b.rollAngle = (b.rollAngle || 0) + (bspd * sdt) / (b.r || this.r);
+            b.rollDir = Math.atan2(b.vy, b.vx);
+          }
+
+          // Check pocket drops (only falls when entering pocket aperture cleanly)
           for (const p of this.pockets) {
             const dist = U.dist(b.x, b.y, p.x, p.y);
-            if (dist < p.r * 1.35) {
+            if (dist < p.r * 1.05) {
               if (!b.sinking && !b.sunk) {
                 this.pocketBall(b, p);
               }
-              nearPocket = true;
               break;
-            } else if (dist < p.r * 2.5) {
-              nearPocket = true;
-              // Pocket mouth suction funnels the ball smoothly into the cup
-              const pull = (p.r * 2.5 - dist) * 28 * sdt;
-              b.vx += ((p.x - b.x) / dist) * pull;
-              b.vy += ((p.y - b.y) / dist) * pull;
             }
           }
           if (b.sunk || b.sinking) continue;
@@ -456,35 +452,43 @@
       // 8-Ball Rules
       if (this.variant === '8ball') {
         const eightSunk = this.pocketedThisShot.some(b => b.id === 8);
-        const playerGroup = this.groups[p];
+        const isBreak = this.isBreakShot;
+        this.isBreakShot = false;
 
         if (eightSunk) {
-          // Pocketing 8-ball: win if player cleared group and didn't scratch; else loss
-          const ownRemaining = this.balls.some(b => !b.sunk && b.id !== 8 && b.id !== 0 && b.type === playerGroup);
-          if (ownRemaining || this.scratch || !playerGroup) {
-            this.finish({
-              winner: opp,
-              title: `${this.playerName(opp)} wins!`,
-              text: `${this.playerName(p)} pocketed the 8-ball prematurely or scratched.`
-            });
+          if (isBreak) {
+            // Re-spot 8-ball on foot spot per official rules
+            const eb = this.balls.find(b => b.id === 8);
+            eb.sunk = false;
+            eb.sinking = null;
+            eb.scale = 1.0;
+            eb.alpha = 1.0;
+            eb.x = this.tx + this.tw / 2;
+            eb.y = this.ty + this.th * 0.28;
+            this.banner('8-BALL SPOTTED!', { color: '#ffd166' });
           } else {
-            this.finish({
-              winner: p,
-              title: `${this.playerName(p)} wins!`,
-              text: `Clean 8-ball finish!`
-            });
+            const hadOwnRemaining = this._ownRemainingBeforeShot > 0;
+            if (hadOwnRemaining || this.scratch || !this.groups[p]) {
+              this.finish({
+                winner: opp,
+                title: `${this.playerName(opp)} wins!`,
+                text: `${this.playerName(p)} pocketed the 8-ball prematurely or scratched.`
+              });
+            } else {
+              this.finish({
+                winner: p,
+                title: `${this.playerName(p)} wins!`,
+                text: `Clean 8-ball finish!`
+              });
+            }
+            return;
           }
-          return;
         }
 
         // Scratch handling
         if (this.scratch) {
           this.ballInHand = true;
-          this.cueBall.sunk = false;
-          this.cueBall.x = this.tx + this.tw / 2;
-          this.cueBall.y = this.ty + this.th * 0.75;
-          this.cueBall.vx = 0;
-          this.cueBall.vy = 0;
+          this.resetCueBall(this.tx + this.tw / 2, this.ty + this.th * 0.72);
           this.turn = opp;
           this.banner('SCRATCH!', { color: '#ff5d6c' });
           this.status(`${this.playerName(opp)}: Ball in hand! Tap table to place cue ball.`);
@@ -493,33 +497,46 @@
           return;
         }
 
-        // Group assignment (open table break or first legal sink)
+        // Group assignment (open table rules):
+        // On break, table remains open even if balls are pocketed.
+        // After break, first legal numbered ball pocketed determines groups.
         let legalSink = false;
         if (!this.groups[0]) {
-          const firstNumbered = this.pocketedThisShot.find(b => b.id !== 8);
-          if (firstNumbered) {
-            this.groups[p] = firstNumbered.type;
-            this.groups[opp] = firstNumbered.type === 'solid' ? 'stripe' : 'solid';
-            legalSink = true;
-            this.banner(firstNumbered.type.toUpperCase() + 'S!', { color: '#ffd166' });
+          if (!isBreak) {
+            const firstNumbered = this.pocketedThisShot.find(b => b.id !== 8);
+            if (firstNumbered) {
+              this.groups[p] = firstNumbered.type;
+              this.groups[opp] = firstNumbered.type === 'solid' ? 'stripe' : 'solid';
+              legalSink = true;
+              this.banner(firstNumbered.type.toUpperCase() + 'S!', { color: '#ffd166' });
+            }
+          } else {
+            // Making balls on break allows shooter to continue on open table
+            legalSink = this.pocketedThisShot.some(b => b.id !== 8);
           }
         } else {
-          legalSink = this.pocketedThisShot.some(b => b.type === playerGroup);
+          legalSink = this.pocketedThisShot.some(b => b.type === this.groups[p]);
         }
 
-        // Legal first contact check
+        // Legal first contact check:
+        // Must hit at least one ball.
+        // On open table: cannot hit 8-ball first.
+        // On closed table: must hit own group first, or if group cleared, must hit 8-ball first.
         let foul = false;
-        if (this.groups[p] && this.firstContact) {
-          const ownRemaining = this.balls.some(b => !b.sunk && b.type === this.groups[p]);
-          if (ownRemaining && this.firstContact.type !== this.groups[p]) foul = true;
-          if (!ownRemaining && this.firstContact.id !== 8) foul = true;
-        } else if (!this.firstContact) {
+        if (!this.firstContact) {
           foul = true;
+        } else if (!this.groups[p]) {
+          if (this.firstContact.id === 8) foul = true;
+        } else {
+          const hadOwnRemaining = this._ownRemainingBeforeShot > 0;
+          if (hadOwnRemaining && this.firstContact.type !== this.groups[p]) foul = true;
+          if (!hadOwnRemaining && this.firstContact.id !== 8) foul = true;
         }
 
         if (foul) {
           this.banner('FOUL!', { color: '#ff5d6c' });
           this.ballInHand = true;
+          this.resetCueBall(this.tx + this.tw / 2, this.ty + this.th * 0.72);
           this.turn = opp;
           this.status(`${this.playerName(opp)}: Ball in hand after foul.`);
         } else if (legalSink) {
@@ -531,7 +548,8 @@
       }
       // 9-Ball Rules
       else {
-        const lowest = this.lowestBallOnTable();
+        // Crucial fix: compare first contact against the lowest ball BEFORE the shot was taken!
+        const lowestTarget = this._lowestBeforeShot || this.lowestBallOnTable();
         const nineSunk = this.pocketedThisShot.some(b => b.id === 9);
 
         if (this.scratch) {
@@ -539,13 +557,14 @@
             // Re-spot 9-ball on foot spot
             const nb = this.balls.find(b => b.id === 9);
             nb.sunk = false;
+            nb.sinking = null;
+            nb.scale = 1.0;
+            nb.alpha = 1.0;
             nb.x = this.tx + this.tw / 2;
             nb.y = this.ty + this.th * 0.28;
           }
           this.ballInHand = true;
-          this.cueBall.sunk = false;
-          this.cueBall.x = this.tx + this.tw / 2;
-          this.cueBall.y = this.ty + this.th * 0.75;
+          this.resetCueBall(this.tx + this.tw / 2, this.ty + this.th * 0.72);
           this.turn = opp;
           this.banner('SCRATCH!', { color: '#ff5d6c' });
           this.status(`${this.playerName(opp)}: Ball in hand!`);
@@ -554,18 +573,22 @@
           return;
         }
 
-        const hitLowestFirst = this.firstContact && this.firstContact.id === lowest;
+        const hitLowestFirst = this.firstContact && this.firstContact.id === lowestTarget;
         if (!hitLowestFirst) {
           if (nineSunk) {
             const nb = this.balls.find(b => b.id === 9);
             nb.sunk = false;
+            nb.sinking = null;
+            nb.scale = 1.0;
+            nb.alpha = 1.0;
             nb.x = this.tx + this.tw / 2;
             nb.y = this.ty + this.th * 0.28;
           }
           this.banner('FOUL!', { color: '#ff5d6c' });
           this.ballInHand = true;
+          this.resetCueBall(this.tx + this.tw / 2, this.ty + this.th * 0.72);
           this.turn = opp;
-          this.status(`${this.playerName(opp)}: Ball in hand (must hit lowest ball #${lowest}).`);
+          this.status(`${this.playerName(opp)}: Ball in hand (must hit lowest ball #${lowestTarget}).`);
         } else if (nineSunk) {
           this.finish({
             winner: p,
@@ -620,13 +643,8 @@
       if (this.over || !this.cpuTurn) return;
 
       if (this.ballInHand) {
-        // Place cue ball in good position behind head string
-        this.cueBall.x = this.tx + this.tw / 2 + U.rand(-35, 35);
-        this.cueBall.y = this.ty + this.th * 0.68;
-        this.cueBall.sunk = false;
-        this.cueBall.sinking = null;
-        this.cueBall.vx = 0;
-        this.cueBall.vy = 0;
+        // Place cue ball with a clear line to target balls
+        this.resetCueBall(this.tx + this.tw / 2 + U.rand(-35, 35), this.ty + this.th * 0.68);
         this.ballInHand = false;
       }
 
@@ -638,6 +656,7 @@
           const own = candidateBalls.filter(b => b.type === playerGroup);
           candidateBalls = own.length > 0 ? own : candidateBalls.filter(b => b.id === 8);
         } else {
+          // Open table: avoid 8-ball
           candidateBalls = candidateBalls.filter(b => b.id !== 8);
         }
       } else {
@@ -647,7 +666,17 @@
 
       if (!candidateBalls.length) candidateBalls = this.balls.filter(b => !b.sunk && !b.sinking && b.id !== 0);
 
-      // Find best target ball + pocket combination
+      // Check whether a line of sight between two points is clear of other balls
+      const isClear = (x1, y1, x2, y2, ignoreIds = []) => {
+        for (const b of this.balls) {
+          if (b.sunk || b.sinking || ignoreIds.includes(b.id)) continue;
+          const d = U.distToSeg(b.x, b.y, x1, y1, x2, y2);
+          if (d < this.r * 1.95) return false;
+        }
+        return true;
+      };
+
+      // Find best target ball + pocket combination with clean trajectories
       let bestShot = null;
       let bestScore = -9999;
 
@@ -670,36 +699,45 @@
 
           // Dot product between cue->ghost and target->pocket (closer to 1 is a direct straight-in shot)
           const cut = (cgX * tpNormX + cgY * tpNormY) / cgDist;
-          if (cut < 0.08) continue; // too sharp a cut angle
+          if (cut < 0.10) continue; // too sharp a cut angle
 
-          const score = cut * 240 - tpDist * 0.25 - cgDist * 0.15;
+          // Raycast obstacle occlusion check
+          const cueClear = isClear(this.cueBall.x, this.cueBall.y, gx, gy, [0, target.id]);
+          const targetClear = isClear(target.x, target.y, pocket.x, pocket.y, [target.id]);
+
+          let score = cut * 250 - tpDist * 0.22 - cgDist * 0.14;
+          if (cueClear && targetClear) score += 300; // huge bonus for clean unobstructed shot
+          else if (!cueClear || !targetClear) score -= 400; // heavily penalize blocked shots
+
           if (score > bestScore) {
             bestScore = score;
-            bestShot = { gx, gy, dist: cgDist, target, cut };
+            bestShot = { gx, gy, dist: cgDist + tpDist, target, cut };
           }
         }
       }
 
       // Difficulty calibration:
-      // Easy: 42% accuracy, sub-optimal choices, noticeable noise
-      // Medium: 78% accuracy, solid cut shots
-      // Hard: 96% accuracy, calculates ghost ball collision angle & power
-      const skill = this.cpuSkill(0.42, 0.78, 0.96);
+      // Easy: 45% accuracy, higher noise
+      // Medium: 80% accuracy, clean cut angles
+      // Hard: 96% accuracy, calculates ghost ball collision angle & distance-calibrated power
+      const skill = this.cpuSkill(0.45, 0.80, 0.96);
       let aimAngle;
       if (bestShot && Math.random() < skill) {
         aimAngle = Math.atan2(bestShot.gy - this.cueBall.y, bestShot.gx - this.cueBall.x);
-        aimAngle += U.gauss() * (1 - skill) * 0.06;
+        aimAngle += U.gauss() * (1 - skill) * 0.05;
       } else {
         const fallback = U.pick(candidateBalls) || { x: this.tx + this.tw / 2, y: this.ty + this.th * 0.28 };
         aimAngle = Math.atan2(fallback.y - this.cueBall.y, fallback.x - this.cueBall.x);
-        if (Math.random() > skill) aimAngle += U.gauss() * 0.15;
+        if (Math.random() > skill) aimAngle += U.gauss() * 0.12;
       }
 
       this.aimAngle = aimAngle;
       this.status(`CPU is lining up a shot...`);
 
       this.wait(600, () => {
-        const pwr = this.cpuSkill(U.rand(0.4, 0.65), U.rand(0.55, 0.8), U.rand(0.65, 0.9));
+        const totalDist = bestShot ? (bestShot.dist + 80) : 340;
+        const basePwr = U.clamp(totalDist / 520, 0.42, 0.88);
+        const pwr = this.cpuSkill(basePwr * 0.85, basePwr, basePwr * 1.05);
         this.shoot(pwr);
       });
     }
@@ -945,41 +983,71 @@
       c.ellipse(x + 1.5, y + 2.5, r * 0.95, r * 0.75, 0, 0, Math.PI * 2);
       c.fill();
 
-      // Ball base color
+      // 3D rolling surface displacement
+      const rollAng = b.rollAngle || 0;
+      const rollDir = b.rollDir || 0;
+      const rollOffX = Math.cos(rollDir) * Math.sin(rollAng) * (r * 0.42);
+      const rollOffY = Math.sin(rollDir) * Math.sin(rollAng) * (r * 0.42);
+      const rollScale = Math.max(0.2, Math.cos(rollAng));
+
       if (type === 'cue') {
         U.ball(c, x, y, r, '#ffffff', { light: '#ffffff', dark: '#d0d4dc' });
-        // Red dot on cue ball for spin feedback
+        // Red dot on cue ball rolls across surface with spin
+        c.save();
+        U.circle(c, x, y, r);
+        c.clip();
         c.fillStyle = '#ff4d6d';
-        U.circle(c, x, y, 1.8);
+        U.circle(c, x + rollOffX, y + rollOffY, 2.0);
         c.fill();
+        c.restore();
       } else if (type === 'eight') {
         U.ball(c, x, y, r, '#1b1b22', { light: '#555566', dark: '#0a0a0e' });
+        c.save();
+        U.circle(c, x, y, r);
+        c.clip();
+        c.save();
+        c.translate(x + rollOffX, y + rollOffY);
+        c.scale(rollScale, 1);
         c.fillStyle = '#fff';
-        U.circle(c, x, y, r * 0.52);
+        U.circle(c, 0, 0, r * 0.52);
         c.fill();
-        U.text(c, '8', x, y, { size: 10, color: '#111', weight: 900, shadow: false });
+        U.text(c, '8', 0, 0, { size: 10, color: '#111', weight: 900, shadow: false });
+        c.restore();
+        c.restore();
       } else if (type === 'stripe' || (this.variant === '9ball' && id === 9)) {
-        // Striped ball: white ball with colored center belt
+        // Striped ball: white ball with colored center belt and rotating number badge
         U.ball(c, x, y, r, '#f5f5f7', { light: '#ffffff', dark: '#cfd2d8' });
         c.save();
         U.circle(c, x, y, r);
         c.clip();
         c.fillStyle = COLORS[id] || '#ffd166';
-        c.fillRect(x - r, y - r * 0.45, r * 2, r * 0.9);
-        c.restore();
+        c.fillRect(x - r, y - r * 0.45 + rollOffY * 0.5, r * 2, r * 0.9);
 
+        c.save();
+        c.translate(x + rollOffX, y + rollOffY);
+        c.scale(rollScale, 1);
         c.fillStyle = '#fff';
-        U.circle(c, x, y, r * 0.48);
+        U.circle(c, 0, 0, r * 0.48);
         c.fill();
-        U.text(c, String(id), x, y, { size: 9, color: '#111', weight: 900, shadow: false });
+        U.text(c, String(id), 0, 0, { size: 9, color: '#111', weight: 900, shadow: false });
+        c.restore();
+        c.restore();
       } else {
-        // Solid ball
+        // Solid ball with rolling number badge
         const color = COLORS[id] || '#ffd166';
         U.ball(c, x, y, r, color);
+        c.save();
+        U.circle(c, x, y, r);
+        c.clip();
+        c.save();
+        c.translate(x + rollOffX, y + rollOffY);
+        c.scale(rollScale, 1);
         c.fillStyle = '#fff';
-        U.circle(c, x, y, r * 0.48);
+        U.circle(c, 0, 0, r * 0.48);
         c.fill();
-        U.text(c, String(id), x, y, { size: 9, color: '#111', weight: 900, shadow: false });
+        U.text(c, String(id), 0, 0, { size: 9, color: '#111', weight: 900, shadow: false });
+        c.restore();
+        c.restore();
       }
 
       c.restore();

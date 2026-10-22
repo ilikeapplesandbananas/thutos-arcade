@@ -23,9 +23,6 @@
 
       this.spawnPenguins();
       this.updateHUD();
-      if (this.cpuTurn) {
-        this.wait(800, () => this.cpuLaunch());
-      }
     }
 
     spawnPenguins() {
@@ -34,25 +31,33 @@
       const d = 55;
 
       // Team 0 (Blue) on bottom half
-      this.penguins.push({ id: 0, team: 0, x: ic.x - d * 1.2, y: ic.y + d, vx: 0, vy: 0, alive: true });
-      this.penguins.push({ id: 1, team: 0, x: ic.x - d * 0.4, y: ic.y + d * 1.4, vx: 0, vy: 0, alive: true });
-      this.penguins.push({ id: 2, team: 0, x: ic.x + d * 0.4, y: ic.y + d * 1.4, vx: 0, vy: 0, alive: true });
-      this.penguins.push({ id: 3, team: 0, x: ic.x + d * 1.2, y: ic.y + d, vx: 0, vy: 0, alive: true });
+      this.penguins.push({ id: 0, team: 0, x: ic.x - d * 1.2, y: ic.y + d, vx: 0, vy: 0, alive: true, aimDx: 0, aimDy: 0, aimDist: 0, isAimed: false });
+      this.penguins.push({ id: 1, team: 0, x: ic.x - d * 0.4, y: ic.y + d * 1.4, vx: 0, vy: 0, alive: true, aimDx: 0, aimDy: 0, aimDist: 0, isAimed: false });
+      this.penguins.push({ id: 2, team: 0, x: ic.x + d * 0.4, y: ic.y + d * 1.4, vx: 0, vy: 0, alive: true, aimDx: 0, aimDy: 0, aimDist: 0, isAimed: false });
+      this.penguins.push({ id: 3, team: 0, x: ic.x + d * 1.2, y: ic.y + d, vx: 0, vy: 0, alive: true, aimDx: 0, aimDy: 0, aimDist: 0, isAimed: false });
 
       // Team 1 (Orange/Red) on top half
-      this.penguins.push({ id: 4, team: 1, x: ic.x - d * 1.2, y: ic.y - d, vx: 0, vy: 0, alive: true });
-      this.penguins.push({ id: 5, team: 1, x: ic.x - d * 0.4, y: ic.y - d * 1.4, vx: 0, vy: 0, alive: true });
-      this.penguins.push({ id: 6, team: 1, x: ic.x + d * 0.4, y: ic.y - d * 1.4, vx: 0, vy: 0, alive: true });
-      this.penguins.push({ id: 7, team: 1, x: ic.x + d * 1.2, y: ic.y - d, vx: 0, vy: 0, alive: true });
+      this.penguins.push({ id: 4, team: 1, x: ic.x - d * 1.2, y: ic.y - d, vx: 0, vy: 0, alive: true, aimDx: 0, aimDy: 0, aimDist: 0, isAimed: false });
+      this.penguins.push({ id: 5, team: 1, x: ic.x - d * 0.4, y: ic.y - d * 1.4, vx: 0, vy: 0, alive: true, aimDx: 0, aimDy: 0, aimDist: 0, isAimed: false });
+      this.penguins.push({ id: 6, team: 1, x: ic.x + d * 0.4, y: ic.y - d * 1.4, vx: 0, vy: 0, alive: true, aimDx: 0, aimDy: 0, aimDist: 0, isAimed: false });
+      this.penguins.push({ id: 7, team: 1, x: ic.x + d * 1.2, y: ic.y - d, vx: 0, vy: 0, alive: true, aimDx: 0, aimDy: 0, aimDist: 0, isAimed: false });
     }
 
     /* ---------- Input ---------- */
     onDown(p) {
-      if (this.moving || this.over || this.cpuTurn) return;
+      if (this.moving || this.over) return;
 
-      // Find if clicking on active player's alive penguin
+      // 1. Check Launch Button (x: 100 to 320, y: 675 to 730)
+      if (p.x >= 100 && p.x <= 320 && p.y >= 675 && p.y <= 730) {
+        Sound.tap();
+        this.handleLaunch();
+        return;
+      }
+
+      // 2. Find if clicking on active player's alive penguin to aim it
+      const myTeam = this.mode === 'local' ? this.turn : 0;
       for (const pen of this.penguins) {
-        if (pen.alive && pen.team === this.turn && U.dist(p.x, p.y, pen.x, pen.y) < this.r * 2) {
+        if (pen.alive && pen.team === myTeam && U.dist(p.x, p.y, pen.x, pen.y) < this.r * 2.2) {
           this.selectedPenguin = pen;
           this.pullAim = { x: p.x, y: p.y };
           Sound.tap();
@@ -77,81 +82,103 @@
       this.pullAim = null;
 
       if (dist > 14) {
-        this.launchPenguin(pen, dx, dy, dist);
+        pen.aimDx = dx;
+        pen.aimDy = dy;
+        pen.aimDist = dist;
+        pen.isAimed = true;
+        Sound.click();
+      } else {
+        pen.isAimed = false;
       }
     }
 
-    launchPenguin(pen, dx, dy, dist) {
-      this.moving = true;
-      const power = U.clamp(dist / 140, 0.1, 1.0);
-      const speed = power * 950;
-      const norm = Math.hypot(dx, dy) || 1;
+    /* ---------- Launch All & CPU Aiming ---------- */
+    handleLaunch() {
+      if (this.moving || this.over) return;
 
-      pen.vx = (dx / norm) * speed;
-      pen.vy = (dy / norm) * speed;
+      const playerTeam = this.mode === 'local' ? this.turn : 0;
+      const ownAlive = this.penguins.filter(p => p.alive && p.team === playerTeam);
+      const enemyTeam = 1 - playerTeam;
+      const enemies = this.penguins.filter(p => p.alive && p.team === enemyTeam);
 
-      Sound.whoosh();
-    }
+      // Auto-aim any un-aimed friendly penguins towards nearest enemy
+      for (const p of ownAlive) {
+        if (!p.isAimed) {
+          const nearest = enemies.slice().sort((a, b) => U.dist(p.x, p.y, a.x, a.y) - U.dist(p.x, p.y, b.x, b.y))[0];
+          if (nearest) {
+            p.aimDx = nearest.x - p.x;
+            p.aimDy = nearest.y - p.y;
+            p.aimDist = 85;
+            p.isAimed = true;
+          }
+        }
+      }
 
-    /* ---------- CPU AI ---------- */
-    cpuLaunch() {
-      if (!this.cpuTurn || this.over || this.moving) return;
+      // Local 2-player handoff
+      if (this.mode === 'local' && this.turn === 0) {
+        this.handoff(1, `Pass to ${this.playerName(1)}`, `Aim your penguins for Round ${this.round}!`)
+          .then(() => {
+            this.turn = 1;
+            this.status(`${this.playerName(1)}: Aim your penguins, then tap Launch!`);
+          });
+        return;
+      }
 
-      const own = this.penguins.filter(p => p.alive && p.team === 1);
-      const foes = this.penguins.filter(p => p.alive && p.team === 0);
-      if (!own.length || !foes.length) return;
+      // In CPU mode: calculate intelligent launch vectors for all CPU penguins
+      if (this.mode === 'cpu') {
+        const cpuPenguins = this.penguins.filter(p => p.alive && p.team === 1);
+        const playerPenguins = this.penguins.filter(p => p.alive && p.team === 0);
+        const skill = this.cpuSkill(0.55, 0.80, 0.96);
 
-      this.wait(1000, () => {
-        if (!this.cpuTurn || this.over) return;
-        const ic = this.iceCenter;
-
-        // Choose striker closest to a foe or best angle to knock off edge
-        let bestStriker = null, bestFoe = null, bestScore = -9999;
-        for (const s of own) {
-          for (const f of foes) {
-            const d = U.dist(s.x, s.y, f.x, f.y);
-            const distToEdge = this.iceR - U.dist(f.x, f.y, ic.x, ic.y);
-            const score = 250 - d + (100 - distToEdge) * 1.5;
+        for (const cp of cpuPenguins) {
+          let bestFoe = null, bestScore = -9999;
+          for (const f of playerPenguins) {
+            const d = U.dist(cp.x, cp.y, f.x, f.y);
+            const distToEdge = this.iceR - U.dist(f.x, f.y, this.iceCenter.x, this.iceCenter.y);
+            const score = 250 - d + (120 - distToEdge) * 1.5;
             if (score > bestScore) {
               bestScore = score;
-              bestStriker = s;
               bestFoe = f;
             }
           }
+          const foe = bestFoe || U.pick(playerPenguins);
+          let dx = foe ? (foe.x - cp.x) : 0;
+          let dy = foe ? (foe.y - cp.y) : 60;
+          if (Math.random() > skill) {
+            dx += U.gauss() * (1 - skill) * 55;
+            dy += U.gauss() * (1 - skill) * 55;
+          }
+          cp.aimDx = dx;
+          cp.aimDy = dy;
+          cp.aimDist = Math.min(130, Math.max(50, Math.hypot(dx, dy) * 0.95));
+          cp.isAimed = true;
         }
+      }
 
-        const striker = bestStriker || U.pick(own);
-        const foe = bestFoe || U.pick(foes);
-        const skill = this.cpuSkill(0.65, 0.82, 0.95);
+      this.launchAllPenguins();
+    }
 
-        let dx = foe.x - striker.x;
-        let dy = foe.y - striker.y;
-        if (Math.random() > skill) {
-          dx += U.gauss() * 40;
-          dy += U.gauss() * 40;
-        }
+    launchAllPenguins() {
+      this.moving = true;
+      this.selectedPenguin = null;
+      this.pullAim = null;
+      Sound.whoosh();
 
-        const pwrDist = Math.min(130, Math.hypot(dx, dy) * 0.9);
-        this.launchPenguin(striker, dx, dy, pwrDist);
-      });
+      // Launch all aimed penguins simultaneously onto the ice!
+      for (const p of this.penguins) {
+        if (!p.alive || !p.isAimed) continue;
+        const power = U.clamp((p.aimDist || 80) / 140, 0.2, 1.0);
+        const speed = power * 960;
+        const norm = Math.hypot(p.aimDx, p.aimDy) || 1;
+        p.vx = (p.aimDx / norm) * speed;
+        p.vy = (p.aimDy / norm) * speed;
+        p.isAimed = false;
+      }
     }
 
     skipCpu() {
-      if (!this.cpuTurn || this.over) return;
-      if (!this.moving) {
-        const own = this.penguins.filter(p => p.alive && p.team === 1);
-        const foes = this.penguins.filter(p => p.alive && p.team === 0);
-        if (own.length && foes.length) {
-          const striker = U.pick(own);
-          const foe = U.pick(foes);
-          this.launchPenguin(striker, foe.x - striker.x, foe.y - striker.y, 100);
-        }
-      }
-      let guard = 0;
-      while (this.moving && guard < 400) {
-        this.update(0.04);
-        guard++;
-      }
+      // No skip button for Knockout
+      return;
     }
 
     /* ---------- Physics Loop ---------- */
@@ -247,27 +274,17 @@
         return;
       }
 
-      // Switch turn
-      const opp = 1 - this.turn;
-      this.turn = opp;
-
-      // Iceberg shrinks slightly after each full round (every 2 shots)
-      if (this.turn === 0) {
-        this.round++;
-        if (this.iceR > 105) {
-          this.iceR -= 14;
-          Sound.thud();
-          this.banner('ICE SHRINKING! ❄️', { color: '#4cc9f0', dur: 1.2 });
-        }
+      // Next round
+      this.round++;
+      this.turn = 0;
+      if (this.iceR > 100) {
+        this.iceR -= 14;
+        Sound.thud();
+        this.banner('ICE SHRINKING! ❄️', { color: '#4cc9f0', dur: 1.2 });
       }
 
       this.updateHUD();
-
-      if (this.mode === 'local') {
-        this.handoff(opp, `Pass to ${this.playerName(opp)}`, `Slingshot your penguin! Round ${this.round}`);
-      } else if (this.cpuTurn) {
-        this.cpuLaunch();
-      }
+      this.status(`Round ${this.round} · Aim your penguins, then tap Launch!`);
     }
 
     updateHUD() {
@@ -279,7 +296,7 @@
         score1: t1,
         p0sub: `${t0} penguins`,
         p1sub: `${t1} penguins`,
-        status: `Round ${this.round} · ${this.playerName(this.turn)}'s launch`
+        status: `Round ${this.round} · Aim penguins, tap Launch!`
       });
     }
 
@@ -333,7 +350,40 @@
       c.lineTo(ic.x + R * 0.4, ic.y - R * 0.3);
       c.stroke();
 
-      // 3. Aim Slingshot Guideline (when pulling back)
+      // 3. Aim arrows for all aimed penguins
+      if (!this.moving && !this.over) {
+        for (const pen of this.penguins) {
+          if (pen.alive && pen.isAimed && pen !== this.selectedPenguin) {
+            const aimLen = Math.min(180, pen.aimDist * 1.5);
+            const normX = pen.aimDx / pen.aimDist;
+            const normY = pen.aimDy / pen.aimDist;
+
+            c.save();
+            c.strokeStyle = pen.team === 0 ? '#ffd166' : '#ff5d6c';
+            c.lineWidth = 3;
+            c.setLineDash([5, 5]);
+            c.beginPath();
+            c.moveTo(pen.x, pen.y);
+            c.lineTo(pen.x + normX * aimLen, pen.y + normY * aimLen);
+            c.stroke();
+            c.setLineDash([]);
+
+            // Arrow tip
+            c.fillStyle = pen.team === 0 ? '#ffd166' : '#ff5d6c';
+            c.translate(pen.x + normX * aimLen, pen.y + normY * aimLen);
+            c.rotate(Math.atan2(normY, normX));
+            c.beginPath();
+            c.moveTo(0, 0);
+            c.lineTo(-12, -6);
+            c.lineTo(-12, 6);
+            c.closePath();
+            c.fill();
+            c.restore();
+          }
+        }
+      }
+
+      // 4. Slingshot Elastic Pull for actively dragged penguin
       if (this.selectedPenguin && this.pullAim && !this.moving) {
         const pen = this.selectedPenguin;
         const dx = pen.x - this.pullAim.x;
@@ -365,9 +415,25 @@
         }
       }
 
-      // 4. Penguins
+      // 5. Penguins
       for (const p of this.penguins) {
         if (p.alive) this.renderPenguin(c, p);
+      }
+
+      // 6. Launch Button
+      if (!this.moving && !this.over) {
+        c.save();
+        c.shadowColor = 'rgba(0,0,0,0.45)';
+        c.shadowBlur = 16;
+        c.shadowOffsetY = 6;
+        const lg = c.createLinearGradient(110, 680, 310, 726);
+        lg.addColorStop(0, '#ff5d6c');
+        lg.addColorStop(1, '#ff9f43');
+        c.fillStyle = lg;
+        U.rr(c, 110, 680, 200, 46, 23);
+        c.fill();
+        c.restore();
+        U.text(c, 'LAUNCH PENGUINS 🚀', 210, 703, { size: 14, color: '#ffffff', weight: 900 });
       }
     }
 

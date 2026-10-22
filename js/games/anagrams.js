@@ -56,11 +56,8 @@
       this.currentWord = '';
       this.usedBankIndices.clear();
 
-      // Fresh randomized 6-letter seed word for this round
-      if (playerIdx > 0 || !this.validWords || !this.validWords.length) {
-        const otherSeeds = SEEDS.filter(s => s !== this.seedWord);
-        this.seedWord = U.pick(otherSeeds.length ? otherSeeds : SEEDS);
-        this.bankLetters = this.seedWord.split('');
+      // Both players play with the EXACT same seed word and letters for fair competition!
+      if (!this.validWords || !this.validWords.length) {
         this.validWords = Words.wordsFromLetters(this.bankLetters, 3);
       }
       this.shuffledBank = U.shuffle(this.bankLetters.slice());

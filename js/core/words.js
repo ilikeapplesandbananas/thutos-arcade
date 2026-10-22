@@ -12,7 +12,7 @@
     'uh','um','un','up','us','ut','we','wo','xi','xu','ya','ye','yo','za'
   ];
 
-  // Modern, pop-culture, tech, and everyday words commonly missed in older 1990s dictionaries
+  // Modern, pop-culture, tech, slang, and everyday words commonly played
   const MODERN_WORDS = [
     'app','apps','online','wifi','blog','blogs','blogger','meme','memes','vibe','vibes','vibing',
     'hype','hyped','pro','pros','nerd','nerds','geek','geeks','bot','bots','chat','chats','code','codes',
@@ -24,7 +24,13 @@
     'gamer','gaming','arcade','cpu','ai','fan','fans','sub','subs','repost','post','posts','dm','tag','tags',
     'live','feed','feeds','stream','streams','reels','clip','clips','lol','omg','wow','yay','oof','oofs',
     'yeet','yeets','tweet','tweets','selfie','selfies','emoji','emojis','wifi','router','glitch','glitches',
-    'noob','noobs','mod','mods','ping','pings','buff','buffs','nerf','nerfs','loot','looted','spawn','spawns'
+    'noob','noobs','mod','mods','ping','pings','buff','buffs','nerf','nerfs','loot','looted','spawn','spawns',
+    // Everyday slang, colloquialisms, and adult vocabulary
+    'damn','damns','damned','damning','hell','hells','ass','asses','bitch','bitches','bitching',
+    'bastard','bastards','cunt','cunts','dick','dicks','cock','cocks','pussy','pussies','shit','shits','shitting',
+    'fuck','fucks','fucked','fucking','fucker','fuckers','piss','pisses','pissed','pissing','fart','farts',
+    'boob','boobs','tit','tits','penis','penises','vagina','vaginas','crap','craps','crappy',
+    'whore','whores','slut','sluts','butt','butts','sexy','babe','babes','hunk','hunks'
   ];
 
   const W = {

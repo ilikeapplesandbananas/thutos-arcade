@@ -65,11 +65,7 @@
       this.path = [];
       this.swiping = false;
 
-      // Fresh randomized board every round
-      if (playerIdx > 0) {
-        this.boardLetters = this.generateBoard();
-      }
-
+      // Both players play on the EXACT same board for fair competition!
       this.banner(playerIdx === 0 ? 'START!' : `${this.playerName(playerIdx)}'S TURN!`, { color: '#ffd166', dur: 1.2 });
       Sound.good();
 

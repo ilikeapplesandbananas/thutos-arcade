@@ -222,10 +222,15 @@
           $('pl0').classList.toggle('turn', state.turn === 0);
           $('pl1').classList.toggle('turn', state.turn === 1);
 
-          // Skip CPU button: ONLY visible when playing vs CPU and it is CPU's turn!
+          // Skip button rules:
+          // 1. Exclude games like knockout and darts
+          // 2. Only show when mode is 'cpu' and it is currently CPU's turn (state.turn === 1)
+          // 3. Immediately disappear as soon as CPU's turn ends or human's turn begins
+          const noSkipGames = ['knockout', 'darts'];
+          const canShowSkip = activeGameDef && !noSkipGames.includes(activeGameDef.id);
           const skipBtn = $('cpuSkipBtn');
           if (skipBtn) {
-            skipBtn.style.display = (mode === 'cpu' && state.turn === 1) ? 'inline-flex' : 'none';
+            skipBtn.style.display = (canShowSkip && mode === 'cpu' && state.turn === 1) ? 'inline-flex' : 'none';
           }
         }
       },
@@ -409,6 +414,7 @@
 
     // Skip CPU turn button
     $('cpuSkipBtn').addEventListener('click', () => {
+      $('cpuSkipBtn').style.display = 'none';
       if (activeGameInstance && typeof activeGameInstance.skipCpu === 'function') {
         activeGameInstance.skipCpu();
       }

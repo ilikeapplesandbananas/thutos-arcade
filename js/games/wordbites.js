@@ -75,7 +75,7 @@
 
       // Row 1: Horizontal pairs (3 blocks: 79x38px each)
       const hXs = [36, 170, 304];
-      const hY = 492;
+      const hY = 498;
       hPairs.forEach((b, i) => {
         b.trayX = hXs[i] !== undefined ? hXs[i] : 36;
         b.trayY = hY;
@@ -108,11 +108,7 @@
       this.timeLeft = 80.0;
       this.activeRound = true;
 
-      // Fresh randomized blocks each round
-      if (playerIdx > 0) {
-        this.blocks = this.generateBlocks();
-      }
-
+      // Both players play with the EXACT same letter blocks for fair competition!
       // Reset grid
       this.grid = Array.from({ length: this.rows }, () => new Array(this.cols).fill(null));
       for (const b of this.blocks) {
@@ -142,25 +138,7 @@
     onDown(p) {
       if (!this.activeRound || this.cpuTurn) return;
 
-      // 1. Check Recall All Button
-      if (p.x >= this.W - 130 && p.x <= this.W - 10 && p.y >= 465 && p.y <= 495) {
-        let recalled = 0;
-        for (const b of this.blocks) {
-          if (b.placed) {
-            this.removeBlockFromGrid(b);
-            b.x = b.trayX;
-            b.y = b.trayY;
-            recalled++;
-          }
-        }
-        if (recalled > 0) {
-          Sound.click();
-          this.scanGridForWords();
-        }
-        return;
-      }
-
-      // 2. Find top-most block under touch
+      // 1. Check if clicking any letter block FIRST (prevents accidental recall when tapping tray blocks)
       for (let i = this.blocks.length - 1; i >= 0; i--) {
         const b = this.blocks[i];
         const bw = b.w * this.cellSize + (b.w - 1) * this.cellGap;
@@ -175,8 +153,26 @@
             this.removeBlockFromGrid(b);
           }
           Sound.tap();
-          break;
+          return;
         }
+      }
+
+      // 2. Only check Recall All Button if NO block was clicked
+      if (p.x >= this.W - 126 && p.x <= this.W - 18 && p.y >= 464 && p.y <= 492) {
+        let recalled = 0;
+        for (const b of this.blocks) {
+          if (b.placed) {
+            this.removeBlockFromGrid(b);
+            b.x = b.trayX;
+            b.y = b.trayY;
+            recalled++;
+          }
+        }
+        if (recalled > 0) {
+          Sound.click();
+          this.scanGridForWords();
+        }
+        return;
       }
     }
 

@@ -239,28 +239,70 @@
         this._cpuPuttPending = false;
         if (!this.cpuTurn || this.over || this.moving || this.ball.inHole || this.ball.sinking) return;
 
-        let target = this.course.hole;
+        let target = { x: this.course.hole.x, y: this.course.hole.y };
+        const bx = this.ball.x, by = this.ball.y;
 
-        // Waypoint navigation for doglegs, chokes & slaloms
-        if (this.courseIdx === 2) {
-          // Hole 3 dogleg
-          if (this.ball.y > 470 && this.ball.x < 190) {
-            target = { x: 130, y: 460 };
-          } else if (this.ball.y > 430 && this.ball.x < 240) {
-            target = { x: 280, y: 440 };
-          }
-        } else if (this.courseIdx === 3) {
-          // Hole 4 Windmill Chute
-          if (this.ball.y > 380) {
-            target = { x: 210, y: 340 };
-          }
-        } else if (this.courseIdx === 5) {
-          // Hole 6 Grand Slalom
-          if (this.ball.y > 490) {
-            target = { x: 300, y: 500 };
-          } else if (this.ball.y > 310) {
-            target = { x: 120, y: 320 };
-          }
+        // Comprehensive intelligent waypoint navigation for all 6 courses
+        switch (this.courseIdx) {
+          case 0: // Hole 1: Choke & Bumper
+            if (by > 410) {
+              target = { x: 210, y: 390 };
+            } else if (by > 300) {
+              target = bx < 210 ? { x: 175, y: 250 } : { x: 245, y: 250 };
+            }
+            break;
+
+          case 1: // Hole 2: Island Divider & Sand Trap
+            if (by > 480) {
+              target = bx <= 210 ? { x: 115, y: 450 } : { x: 305, y: 450 };
+            } else if (by > 330) {
+              target = bx <= 210 ? { x: 115, y: 310 } : { x: 305, y: 310 };
+            } else if (by > 220 && Math.abs(bx - 210) < 45) {
+              target = { x: bx < 210 ? 150 : 270, y: 190 };
+            }
+            break;
+
+          case 2: // Hole 3: Dogleg & Water Hazard
+            if (by > 510) {
+              target = { x: 130, y: 470 };
+            } else if (by > 410 && bx < 220) {
+              target = { x: 285, y: 460 };
+            } else if (by > 350) {
+              target = { x: 290, y: 340 };
+            } else if (by > 260) {
+              target = { x: 315, y: 240 };
+            }
+            break;
+
+          case 3: // Hole 4: Windmill Chute
+            if (by > 440) {
+              target = { x: 210, y: 410 };
+            } else if (by > 260) {
+              target = { x: 210, y: 240 };
+            }
+            break;
+
+          case 4: // Hole 5: Island Moat & Center Bumper
+            if (by > 410) {
+              target = bx <= 210 ? { x: 170, y: 360 } : { x: 250, y: 360 };
+            } else if (by > 290) {
+              target = { x: 210, y: 240 };
+            }
+            break;
+
+          case 5: // Hole 6: Grand Slalom
+            if (by > 505) {
+              target = { x: 315, y: 515 };
+            } else if (by > 450) {
+              target = { x: 315, y: 435 };
+            } else if (by > 325) {
+              target = { x: 105, y: 340 };
+            } else if (by > 265) {
+              target = { x: 105, y: 250 };
+            } else if (by > 190) {
+              target = { x: 270, y: 180 };
+            }
+            break;
         }
 
         const dx = target.x - this.ball.x;
@@ -268,17 +310,17 @@
         const dist = Math.hypot(dx, dy);
 
         // Difficulty calibration:
-        // Easy: 48% accuracy, wider angle spread
-        // Medium: 78% accuracy
-        // Hard: 96% accuracy, optimal line & speed
-        const accuracy = this.cpuSkill(0.48, 0.78, 0.96);
+        // Easy: 50% accuracy, wider angle spread
+        // Medium: 80% accuracy, clean lines
+        // Hard: 97% accuracy, master putter
+        const accuracy = this.cpuSkill(0.50, 0.80, 0.97);
         let aimX = dx, aimY = dy;
         if (Math.random() > accuracy) {
-          aimX += U.gauss() * (1 - accuracy) * 75;
-          aimY += U.gauss() * (1 - accuracy) * 75;
+          aimX += U.gauss() * (1 - accuracy) * 50;
+          aimY += U.gauss() * (1 - accuracy) * 50;
         }
 
-        const pwrDist = Math.min(130, dist * 0.42);
+        const pwrDist = Math.min(130, Math.max(30, dist * 0.44));
         this.putt(aimX, aimY, pwrDist);
       });
     }

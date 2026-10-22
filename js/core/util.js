@@ -23,6 +23,11 @@ window.Arcade = window.Arcade || {};
     return { x: ax + dx * t, y: ay + dy * t, t };
   };
 
+  U.distToSeg = (px, py, ax, ay, bx, by) => {
+    const cp = U.closestOnSeg(px, py, ax, ay, bx, by);
+    return Math.hypot(px - cp.x, py - cp.y);
+  };
+
   /* ---------- canvas drawing ---------- */
   U.rr = (c, x, y, w, h, r) => {
     r = Math.min(r, w / 2, h / 2);
